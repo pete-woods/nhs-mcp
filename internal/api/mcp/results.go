@@ -3,12 +3,20 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
+	"time"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/pete-woods/nhs-mcp/internal/client/nhsapp"
+	"github.com/pete-woods/nhs-mcp/internal/htmltext"
 	"github.com/pete-woods/nhs-mcp/internal/record"
 )
+
+// DefaultHistoryYears is how many years of older results are fetched, for GP
+// systems that send them a year at a time, when a tool isn't given a date.
+const DefaultHistoryYears = 10
 
 const (
 	defaultResultsLimit = 50
@@ -81,7 +89,7 @@ func (a *api) listResults(ctx context.Context, _ *sdk.CallToolRequest, in listRe
 	if !until.IsZero() {
 		until = until.AddDate(0, 0, 1) // until is inclusive
 	}
-	r, err := a.sessions.Record(ctx)
+	r, warning, err := a.results(ctx, since)
 	if err != nil {
 		return nil, nil, userError(err)
 	}
@@ -92,7 +100,7 @@ func (a *api) listResults(ctx context.Context, _ *sdk.CallToolRequest, in listRe
 		Results:   make([]resultSummary, 0, len(shown)),
 		Matched:   len(found),
 		Truncated: truncated,
-		Warning:   resultsWarning(r),
+		Warning:   warning,
 	}
 	for _, tr := range shown {
 		out.Results = append(out.Results, resultSummary{
@@ -128,10 +136,11 @@ type getResultOutput struct {
 	Name   string        `json:"name"`
 	Notes  []string      `json:"notes,omitempty" jsonschema:"Comments on the whole result, e.g. from the GP who reviewed it."`
 	Values []measurement `json:"values"`
+	Detail string        `json:"detail,omitempty" jsonschema:"The result as text, for GP systems that don't break results into values."`
 }
 
 func (a *api) getResult(ctx context.Context, _ *sdk.CallToolRequest, in getResultInput) (*sdk.CallToolResult, *getResultOutput, error) {
-	r, err := a.sessions.Record(ctx)
+	r, _, err := a.results(ctx, time.Time{})
 	if err != nil {
 		return nil, nil, userError(err)
 	}
@@ -148,6 +157,15 @@ func (a *api) getResult(ctx context.Context, _ *sdk.CallToolRequest, in getResul
 	}
 	for _, v := range tr.Values {
 		out.Values = append(out.Values, toMeasurement(v))
+	}
+	if len(tr.Values) == 0 {
+		detail, ok, err := a.sessions.TestResultDetail(ctx, tr.ID)
+		if err != nil {
+			return nil, nil, userError(err)
+		}
+		if ok {
+			out.Detail = htmltext.Text(detail)
+		}
 	}
 	return nil, out, nil
 }
@@ -166,6 +184,7 @@ type trendPoint struct {
 type getTrendOutput struct {
 	Measurements []string     `json:"measurements" jsonschema:"The measurement names matched."`
 	Points       []trendPoint `json:"points"`
+	Warning      string       `json:"warning,omitempty"`
 }
 
 func (a *api) getTrend(ctx context.Context, _ *sdk.CallToolRequest, in getTrendInput) (*sdk.CallToolResult, *getTrendOutput, error) {
@@ -176,12 +195,12 @@ func (a *api) getTrend(ctx context.Context, _ *sdk.CallToolRequest, in getTrendI
 	if err != nil {
 		return nil, nil, err
 	}
-	r, err := a.sessions.Record(ctx)
+	r, warning, err := a.results(ctx, since)
 	if err != nil {
 		return nil, nil, userError(err)
 	}
 	points, names := record.Trend(r, in.Name)
-	out := &getTrendOutput{Measurements: names, Points: []trendPoint{}}
+	out := &getTrendOutput{Measurements: names, Points: []trendPoint{}, Warning: warning}
 	if names == nil {
 		out.Measurements = []string{}
 	}
@@ -203,15 +222,16 @@ type testName struct {
 type listNamesOutput struct {
 	Tests        []testName `json:"tests"`
 	Measurements []testName `json:"measurements"`
+	Warning      string     `json:"warning,omitempty"`
 }
 
 func (a *api) listNames(ctx context.Context, _ *sdk.CallToolRequest, _ struct{}) (*sdk.CallToolResult, *listNamesOutput, error) {
-	r, err := a.sessions.Record(ctx)
+	r, warning, err := a.results(ctx, time.Time{})
 	if err != nil {
 		return nil, nil, userError(err)
 	}
 	tests, measurements := record.Names(r)
-	return nil, &listNamesOutput{Tests: toNames(tests), Measurements: toNames(measurements)}, nil
+	return nil, &listNamesOutput{Tests: toNames(tests), Measurements: toNames(measurements), Warning: warning}, nil
 }
 
 func toMeasurement(v nhsapp.TestResultValue) measurement {
@@ -247,12 +267,35 @@ func notes(texts []nhsapp.AssociatedText) []string {
 	return out
 }
 
-func resultsWarning(r nhsapp.Record) string {
+// results returns the record with its test results back to since, fetching
+// older years when the GP system sends them separately. Without since, it
+// goes back DefaultHistoryYears. The warning says what may be missing.
+func (a *api) results(ctx context.Context, since time.Time) (nhsapp.Record, string, error) {
+	fromYear := time.Now().Year() - DefaultHistoryYears
+	if !since.IsZero() {
+		fromYear = since.Year()
+	}
+	r, failed, err := a.sessions.RecordFrom(ctx, fromYear)
+	if err != nil {
+		return nhsapp.Record{}, "", err
+	}
 	if w := sectionWarning("test results", r.TestResults.SectionStatus); w != "" {
-		return w
+		return r, w, nil
 	}
-	if !r.TestResults.HasAllHistoricResults && len(r.HistoricTestResults.Data) == 0 {
-		return "Older test results may be missing: the GP system didn't return all historic results."
+	var warnings []string
+	if !r.TestResults.HasAllHistoricResults && since.IsZero() {
+		warnings = append(warnings, fmt.Sprintf("Only results since %d were searched; pass since to go further back.", fromYear))
 	}
-	return ""
+	if len(failed) > 0 {
+		warnings = append(warnings, fmt.Sprintf("Results for %s couldn't be fetched.", joinInts(failed)))
+	}
+	return r, strings.Join(warnings, " "), nil
+}
+
+func joinInts(ns []int) string {
+	s := make([]string, len(ns))
+	for i, n := range ns {
+		s[i] = strconv.Itoa(n)
+	}
+	return strings.Join(s, ", ")
 }

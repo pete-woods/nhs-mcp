@@ -18,6 +18,8 @@ const instructions = `Reads the user's own GP record through the NHS App. Unoffi
 
 Call login first. It opens a browser window where the user signs in to NHS login themselves; it waits until they finish, which can take a few minutes. Sessions end after about ten minutes idle, after which tools say so and login is needed again.
 
+Consultations and documents: list_consultations shows what was recorded at each appointment; list_documents lists letters and scans, and get_document reads one, as text or as page images.
+
 For test results: list_test_results finds results (filter by date, name, or out_of_range_only); get_test_result shows every value in one; get_test_trend follows one measurement (e.g. "Serum ferritin") over the years; list_test_names gives the exact names to use.
 
 Ranges and flags come from the GP system. Out-of-range doesn't always mean something is wrong — leave clinical judgement to the user's clinicians.`
@@ -38,6 +40,7 @@ func New(cfg Config) *sdk.Server {
 	a.addAuthTools(s)
 	a.addResultTools(s)
 	a.addRecordTools(s)
+	a.addDocumentTools(s)
 	return s
 }
 

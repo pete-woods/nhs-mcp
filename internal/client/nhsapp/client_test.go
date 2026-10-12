@@ -3,6 +3,7 @@ package nhsapp_test
 import (
 	"testing"
 
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"gotest.tools/v3/assert"
 	"gotest.tools/v3/assert/cmp"
 
@@ -37,7 +38,9 @@ func TestClient(t *testing.T) {
 		assert.Check(t, !s.HasGPSession)
 		got, err := c.Session(ctx)
 		assert.NilError(t, err)
-		assert.Check(t, cmp.DeepEqual(got, s))
+		assert.Check(t, cmp.DeepEqual(got, s, cmpopts.IgnoreFields(nhsapp.Session{}, "ServiceJourneyRules")))
+		assert.Assert(t, s.ServiceJourneyRules != nil, "creating a session returns the journey rules")
+		assert.Check(t, cmp.Equal(s.ServiceJourneyRules.Journeys.IM1TestResults.Version, "3"))
 		assert.Check(t, c.ExtendSession(ctx))
 	})
 

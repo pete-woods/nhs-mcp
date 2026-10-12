@@ -17,6 +17,8 @@ type Record struct {
 	TestResults             TestResultsSection    `json:"testResults"`
 	HistoricTestResults     TestResultsSection    `json:"historicTestResults"`
 	Problems                Section[Problem]      `json:"problems"`
+	Consultations           Section[Consultation] `json:"consultations"`
+	Documents               Section[Document]     `json:"documents"`
 }
 
 // SectionStatus says whether a section of the record could be read.
@@ -156,4 +158,41 @@ type Immunisation struct {
 type Problem struct {
 	EffectiveDate Date       `json:"effectiveDate"`
 	LineItems     []LineItem `json:"lineItems"`
+}
+
+// Consultation is an encounter with the practice: who saw the patient, and
+// what they recorded under each heading (History, Examination, ...).
+type Consultation struct {
+	EffectiveDate      Date                 `json:"effectiveDate"`
+	ConsultantLocation string               `json:"consultantLocation"`
+	Location           string               `json:"location"`
+	DoneBy             string               `json:"doneBy"`
+	Headers            []ConsultationHeader `json:"consultationHeaders"`
+}
+
+type ConsultationHeader struct {
+	Header          string        `json:"header"`
+	AssociatedTexts []string      `json:"associatedTexts"`
+	Observations    []Observation `json:"observationsWithTerm"`
+}
+
+type Observation struct {
+	Term            string   `json:"term"`
+	AssociatedTexts []string `json:"associatedTexts"`
+	ObservationType string   `json:"observationType"`
+	EventGUID       string   `json:"eventGuid"`
+}
+
+// Document is a letter, scan or attachment in the record. Fetch it with
+// Client.Document or Client.DownloadDocument.
+type Document struct {
+	DocumentIdentifier  string `json:"documentIdentifier"`
+	EffectiveDate       Date   `json:"effectiveDate"`
+	Term                string `json:"term"`
+	Name                string `json:"name"`
+	Extension           string `json:"extension"`
+	Size                int    `json:"size"`
+	IsAvailable         bool   `json:"isAvailable"`
+	IsValidFile         bool   `json:"isValidFile"`
+	NeedMoreInformation bool   `json:"needMoreInformation"`
 }

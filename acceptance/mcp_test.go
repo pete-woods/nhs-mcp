@@ -28,9 +28,9 @@ func TestE2E(t *testing.T) {
 			names = append(names, tool.Name)
 		}
 		assert.Check(t, cmp.DeepEqual(names, []string{
-			"get_allergies", "get_demographics", "get_immunisations", "get_login_status",
+			"get_allergies", "get_demographics", "get_document", "get_immunisations", "get_login_status",
 			"get_medications", "get_problems", "get_test_result", "get_test_trend",
-			"list_test_names", "list_test_results", "login", "logout",
+			"list_consultations", "list_documents", "list_test_names", "list_test_results", "login", "logout",
 		}))
 	})
 

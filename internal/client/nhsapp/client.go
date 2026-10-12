@@ -96,6 +96,19 @@ type Session struct {
 	SessionTimeout   int    `json:"sessionTimeout"`
 	Token            string `json:"token"`
 	PatientSessionID string `json:"patientSessionId"`
+	// ServiceJourneyRules say which features the GP system supports. Only
+	// creating the session returns them.
+	ServiceJourneyRules *JourneyRules `json:"serviceJourneyRules"`
+}
+
+type JourneyRules struct {
+	Journeys struct {
+		IM1TestResults struct {
+			// Version "3" means the record breaks test results down into
+			// values; earlier versions need TestResultDetail.
+			Version string `json:"version"`
+		} `json:"im1TestResults"`
+	} `json:"journeys"`
 }
 
 // AuthCode is an authorization code from NHS login with its PKCE verifier.
@@ -174,6 +187,75 @@ func (c *Client) MyRecord(ctx context.Context) (Record, error) {
 	}
 	err := c.call(ctx, httpcl.NewRequest(http.MethodGet, "/v1/patient/my-record", httpcl.JSONDecoder(&resp)))
 	return resp.Response, err
+}
+
+// HistoricTestResults fetches one year's older test results. The record only
+// needs them when TestResults.HasAllHistoricResults is false.
+func (c *Client) HistoricTestResults(ctx context.Context, year int) (TestResultsSection, error) {
+	var resp struct {
+		Response TestResultsSection `json:"response"`
+	}
+	err := c.call(ctx, httpcl.NewRequest(http.MethodGet, "/v1/patient/historic-test-results/%d",
+		httpcl.RouteParams(year),
+		httpcl.JSONDecoder(&resp),
+	))
+	return resp.Response, err
+}
+
+// TestResultDetail fetches a result's detail as HTML. GP systems whose
+// record doesn't break results down into values (pre-"v3" in the web app)
+// need it; for the rest the record already has everything.
+func (c *Client) TestResultDetail(ctx context.Context, id string) (string, error) {
+	var resp struct {
+		Response struct {
+			TestResult string `json:"testResult"`
+		} `json:"response"`
+	}
+	err := c.call(ctx, httpcl.NewRequest(http.MethodGet, "/v1/patient/test-result",
+		httpcl.QueryParam("testResultId", id),
+		httpcl.JSONDecoder(&resp),
+	))
+	return resp.Response.TestResult, err
+}
+
+// DocumentContent is a document converted for viewing.
+type DocumentContent struct {
+	// Content is HTML, when IsViewable.
+	Content        string `json:"content"`
+	IsViewable     bool   `json:"isViewable"`
+	IsDownloadable bool   `json:"isDownloadable"`
+	Type           string `json:"type"`
+	PageCount      int    `json:"pageCount"`
+}
+
+// Document fetches a document from the record for viewing.
+func (c *Client) Document(ctx context.Context, d Document) (DocumentContent, error) {
+	var content DocumentContent
+	err := c.call(ctx, httpcl.NewRequest(http.MethodPost, "/v1/documents/%s",
+		httpcl.RouteParams(d.DocumentIdentifier),
+		httpcl.Body(documentRequest(d)),
+		httpcl.JSONDecoder(&content),
+	))
+	return content, err
+}
+
+// DownloadDocument fetches a document's original file, and its content type.
+func (c *Client) DownloadDocument(ctx context.Context, d Document) ([]byte, string, error) {
+	var (
+		body   []byte
+		header http.Header
+	)
+	err := c.call(ctx, httpcl.NewRequest(http.MethodPost, "/v1/documents/%s/download",
+		httpcl.RouteParams(d.DocumentIdentifier),
+		httpcl.Body(documentRequest(d)),
+		httpcl.BytesDecoder(&body),
+		httpcl.CaptureHeader(&header),
+	))
+	return body, header.Get("Content-Type"), err
+}
+
+func documentRequest(d Document) map[string]string {
+	return map[string]string{"type": d.Extension, "name": d.Name}
 }
 
 func (c *Client) exchange(ctx context.Context, method, route string, code AuthCode) (Session, error) {

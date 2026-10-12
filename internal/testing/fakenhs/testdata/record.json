@@ -118,7 +118,39 @@
       ]
     },
     "tppDcrEvents": {"hasAccess": true, "hasErrored": false, "recordCount": 0, "errors": null, "data": []},
-    "consultations": {"hasAccess": true, "hasErrored": false, "recordCount": 0, "data": []},
-    "documents": {"hasAccess": true, "hasErrored": false, "recordCount": 0, "data": []}
+    "consultations": {
+      "hasAccess": true, "hasErrored": false, "recordCount": 2,
+      "data": [
+        {
+          "effectiveDate": {"value": "2023-06-05T10:20:00+00:00", "datePart": "YearMonthDayTime"},
+          "consultantLocation": "EXAMPLE, ALEX (DR)", "location": null, "doneBy": "EXAMPLE, ALEX (DR)",
+          "consultationHeaders": [
+            {"header": "History", "associatedTexts": ["Tired for three months"], "observationsWithTerm": [
+              {"term": "Tiredness symptom", "associatedTexts": ["worse in the afternoons"], "eventGuid": "obs-1", "codeId": 1, "observationType": "Observation"}
+            ]},
+            {"header": "Problem", "associatedTexts": [], "observationsWithTerm": [
+              {"term": "Iron deficiency anaemia", "associatedTexts": [], "eventGuid": "obs-2", "codeId": 2, "observationType": "Observation"}
+            ]}
+          ]
+        },
+        {
+          "effectiveDate": {"value": "2021-02-01T00:00:00+00:00", "datePart": "YearMonthDay"},
+          "consultantLocation": "Example Surgery", "location": null, "doneBy": "NURSE, SAM (NURSE)",
+          "consultationHeaders": [
+            {"header": "Examination", "associatedTexts": [], "observationsWithTerm": [
+              {"term": "O/E - blood pressure reading", "associatedTexts": ["120/80"], "eventGuid": "obs-3", "codeId": null, "observationType": "Observation"}
+            ]}
+          ]
+        }
+      ]
+    },
+    "documents": {
+      "hasAccess": true, "hasErrored": false, "recordCount": 3,
+      "data": [
+        {"effectiveDate": {"value": "2023-07-01T00:00:00+00:00", "datePart": "YearMonthDay"}, "documentIdentifier": "doc-letter", "term": "Letter from haematology", "size": 2048, "extension": "rtf", "isAvailable": true, "name": "Haematology clinic letter", "eventGuid": "e1", "codeId": 1, "type": null, "isValidFile": true, "comments": null, "needMoreInformation": false},
+        {"effectiveDate": {"value": "2024-01-15T00:00:00+00:00", "datePart": "YearMonthDay"}, "documentIdentifier": "doc-scan", "term": "Scanned discharge summary", "size": 4096, "extension": "PDF", "isAvailable": true, "name": "Discharge summary", "eventGuid": "e2", "codeId": 2, "type": null, "isValidFile": true, "comments": null, "needMoreInformation": false},
+        {"effectiveDate": {"value": "2019-03-03T00:00:00+00:00", "datePart": "YearMonthDay"}, "documentIdentifier": "doc-missing", "term": "Old referral", "size": 0, "extension": "html", "isAvailable": false, "name": "Referral", "eventGuid": "e3", "codeId": 3, "type": null, "isValidFile": false, "comments": null, "needMoreInformation": false}
+      ]
+    }
   }
 }

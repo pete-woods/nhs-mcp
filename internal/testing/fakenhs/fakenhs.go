@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -58,25 +59,42 @@ type session struct {
 	gp        bool
 }
 
+// Document is what the fake serves for a document in the record.
+type Document struct {
+	// HTML is what viewing returns, as the NHS App converts it.
+	HTML string
+	// File and ContentType are what downloading returns.
+	File        []byte
+	ContentType string
+}
+
 type Server struct {
 	login *httptest.Server
 	app   *httptest.Server
 
-	mu          sync.Mutex
-	interactive bool
-	record      []byte
-	grants      map[string]grant
-	identities  map[string]bool
-	sessions    map[string]*session
-	requests    []Request
+	mu             sync.Mutex
+	interactive    bool
+	resultsVersion string
+	historic       map[int][]byte
+	details        map[string]string
+	documents      map[string]Document
+	record         []byte
+	grants         map[string]grant
+	identities     map[string]bool
+	sessions       map[string]*session
+	requests       []Request
 }
 
 func New(t testing.TB) *Server {
 	s := &Server{
-		record:     Record,
-		grants:     map[string]grant{},
-		identities: map[string]bool{},
-		sessions:   map[string]*session{},
+		record:         Record,
+		resultsVersion: "3",
+		historic:       map[int][]byte{},
+		details:        map[string]string{},
+		documents:      defaultDocuments(),
+		grants:         map[string]grant{},
+		identities:     map[string]bool{},
+		sessions:       map[string]*session{},
 	}
 
 	login := http.NewServeMux()
@@ -94,6 +112,10 @@ func New(t testing.TB) *Server {
 	app.HandleFunc("POST /v1/patient/asserted-login-identity", s.authed(s.handleAssertedLoginIdentity))
 	app.HandleFunc("GET /v1/patient/my-record", s.authed(s.gp(s.handleRecord)))
 	app.HandleFunc("GET /v1/patient/demographics", s.authed(s.gp(s.handleDemographics)))
+	app.HandleFunc("GET /v1/patient/historic-test-results/{year}", s.authed(s.gp(s.handleHistoric)))
+	app.HandleFunc("GET /v1/patient/test-result", s.authed(s.gp(s.handleResultDetail)))
+	app.HandleFunc("POST /v1/documents/{id}", s.authed(s.gp(s.handleDocument)))
+	app.HandleFunc("POST /v1/documents/{id}/download", s.authed(s.gp(s.handleDownload)))
 	s.app = httptest.NewServer(s.logRequests(app))
 	t.Cleanup(s.app.Close)
 	return s
@@ -119,6 +141,37 @@ func (s *Server) SetRecord(body []byte) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.record = body
+}
+
+// SetTestResultsVersion sets the im1TestResults version in the journey
+// rules. Version "3" (the default) means the record has each result's
+// values; others mean results need GET /v1/patient/test-result.
+func (s *Server) SetTestResultsVersion(v string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.resultsVersion = v
+}
+
+// SetHistoric sets one year's historic test results, a testResults section.
+// They're served only when the record says it lacks historic results.
+func (s *Server) SetHistoric(year int, section []byte) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.historic[year] = section
+}
+
+// SetResultDetail sets the HTML detail of a test result.
+func (s *Server) SetResultDetail(id, html string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.details[id] = html
+}
+
+// SetDocument sets what's served for a document id.
+func (s *Server) SetDocument(id string, d Document) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.documents[id] = d
 }
 
 // ExpireSessions ends every session, as the NHS App does after ten minutes idle.
@@ -216,7 +269,7 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	http.SetCookie(w, &http.Cookie{Name: "NHSO-Session-Id", Value: id, Path: "/", HttpOnly: true})
-	writeJSON(w, http.StatusCreated, s.sessionJSON(sess))
+	writeJSON(w, http.StatusCreated, s.sessionJSON(sess, true))
 }
 
 func (s *Server) handleCreateGPSession(w http.ResponseWriter, r *http.Request, sess *session) {
@@ -226,11 +279,11 @@ func (s *Server) handleCreateGPSession(w http.ResponseWriter, r *http.Request, s
 	s.mu.Lock()
 	sess.gp = true
 	s.mu.Unlock()
-	writeJSON(w, http.StatusCreated, s.sessionJSON(sess))
+	writeJSON(w, http.StatusCreated, s.sessionJSON(sess, false))
 }
 
 func (s *Server) handleGetSession(w http.ResponseWriter, _ *http.Request, sess *session) {
-	writeJSON(w, http.StatusOK, s.sessionJSON(sess))
+	writeJSON(w, http.StatusOK, s.sessionJSON(sess, false))
 }
 
 func (s *Server) handleDeleteSession(_ http.ResponseWriter, r *http.Request, _ *session) {
@@ -271,6 +324,96 @@ func (s *Server) handleDemographics(w http.ResponseWriter, _ *http.Request, _ *s
 		"address":     "1 Test Street, Testtown, TE1 1ST",
 		"nhsNumber":   NHSNumber,
 	}})
+}
+
+// handleHistoric answers 400 when the record already has every result, as
+// the NHS App does.
+func (s *Server) handleHistoric(w http.ResponseWriter, r *http.Request, _ *session) {
+	year, err := strconv.Atoi(r.PathValue("year"))
+	s.mu.Lock()
+	hasAll := s.hasAllHistoric()
+	section, ok := s.historic[year]
+	s.mu.Unlock()
+	switch {
+	case err != nil || hasAll:
+		writeJSON(w, http.StatusBadRequest, map[string]any{"errorCode": 3, "errorMessage": "bad request"})
+	case !ok:
+		writeJSON(w, http.StatusOK, map[string]any{"response": map[string]any{"hasAccess": true, "data": []any{}}})
+	default:
+		writeJSON(w, http.StatusOK, map[string]json.RawMessage{"response": section})
+	}
+}
+
+// handleResultDetail fails with a 500 for "v3" GP systems, as EMIS does.
+func (s *Server) handleResultDetail(w http.ResponseWriter, r *http.Request, _ *session) {
+	s.mu.Lock()
+	v3 := s.resultsVersion == "3"
+	html, ok := s.details[r.URL.Query().Get("testResultId")]
+	s.mu.Unlock()
+	switch {
+	case v3:
+		w.WriteHeader(http.StatusInternalServerError)
+	case !ok:
+		writeJSON(w, http.StatusBadRequest, map[string]any{"errorCode": 4, "errorMessage": "unknown test result"})
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"response": map[string]any{"testResult": html}})
+	}
+}
+
+func (s *Server) handleDocument(w http.ResponseWriter, r *http.Request, _ *session) {
+	d, ok := s.document(w, r)
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"content":        d.HTML,
+		"isViewable":     d.HTML != "",
+		"isDownloadable": d.File != nil,
+		"type":           nil,
+		"pageCount":      nil,
+	})
+}
+
+func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request, _ *session) {
+	d, ok := s.document(w, r)
+	if !ok {
+		return
+	}
+	w.Header().Set("Content-Type", d.ContentType)
+	_, _ = w.Write(d.File)
+}
+
+// document finds the requested document, which must name its type and name
+// as the web app sends them.
+func (s *Server) document(w http.ResponseWriter, r *http.Request) (Document, bool) {
+	var body struct {
+		Type string `json:"type"`
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Type == "" || body.Name == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return Document{}, false
+	}
+	s.mu.Lock()
+	d, ok := s.documents[r.PathValue("id")]
+	s.mu.Unlock()
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{"errorCode": 5, "errorMessage": "document not found"})
+	}
+	return d, ok
+}
+
+// hasAllHistoric reads the record's flag. The caller must hold s.mu.
+func (s *Server) hasAllHistoric() bool {
+	var rec struct {
+		Response struct {
+			TestResults struct {
+				HasAllHistoricResults bool `json:"hasAllHistoricResults"`
+			} `json:"testResults"`
+		} `json:"response"`
+	}
+	_ = json.Unmarshal(s.record, &rec)
+	return rec.Response.TestResults.HasAllHistoricResults
 }
 
 // redeem spends the authorization code in the request body.
@@ -332,18 +475,25 @@ func (s *Server) gp(next func(http.ResponseWriter, *http.Request, *session)) fun
 	}
 }
 
-func (s *Server) sessionJSON(sess *session) map[string]any {
+func (s *Server) sessionJSON(sess *session, rules bool) map[string]any {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	var journeyRules any
+	if rules {
+		journeyRules = map[string]any{"journeys": map[string]any{
+			"im1TestResults": map[string]any{"version": s.resultsVersion},
+		}}
+	}
 	return map[string]any{
-		"name":             Name,
-		"sessionTimeout":   600,
-		"odsCode":          ODSCode,
-		"token":            sess.csrf,
-		"nhsNumber":        NHSNumber,
-		"hasGpSession":     sess.gp,
-		"patientSessionId": sess.patientID,
-		"proofLevel":       ProofLevel,
+		"serviceJourneyRules": journeyRules,
+		"name":                Name,
+		"sessionTimeout":      600,
+		"odsCode":             ODSCode,
+		"token":               sess.csrf,
+		"nhsNumber":           NHSNumber,
+		"hasGpSession":        sess.gp,
+		"patientSessionId":    sess.patientID,
+		"proofLevel":          ProofLevel,
 	}
 }
 
@@ -376,6 +526,29 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// tinyPNG is a 1x1 PNG, standing in for a scanned page.
+const tinyPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+
+// defaultDocuments serve the fixture's documents: a letter that views as
+// HTML text, and a scan that views as page images.
+func defaultDocuments() map[string]Document {
+	page := `<img src="data:image/png;base64,` + tinyPNG + `"><br>`
+	// As some GP systems send them: a non-standard type, and wrapped base64.
+	jpgAlias := `<IMG alt="page" SRC='data:image/jpg;base64,` + tinyPNG[:20] + "\n" + tinyPNG[20:] + `'>`
+	return map[string]Document{
+		"doc-letter": {
+			HTML:        `<div><p>Dear Dr Example,</p><p>Ferritin has recovered on oral iron.</p><table><tr><td>Ferritin</td><td>22 ug/L</td></tr></table></div>`,
+			File:        []byte("Dear Dr Example, Ferritin has recovered on oral iron."),
+			ContentType: "text/plain",
+		},
+		"doc-scan": {
+			HTML:        page + jpgAlias + `<img src="data:image/tiff;base64,SUkqAA==">`,
+			File:        []byte("%PDF-1.4 fake"),
+			ContentType: "application/pdf",
+		},
+	}
 }
 
 func token() string {

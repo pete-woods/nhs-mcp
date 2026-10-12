@@ -202,6 +202,7 @@ type result struct {
 	Name   string        `json:"name"`
 	Notes  []string      `json:"notes"`
 	Values []measurement `json:"values"`
+	Detail string        `json:"detail"`
 }
 
 type trendPoint struct {

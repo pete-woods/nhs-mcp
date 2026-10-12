@@ -33,7 +33,9 @@ Any MCP client that runs stdio servers works the same way: run `bin/nhs-mcp`.
    *"Show me the first one"* (`get_test_result`).
 4. Ask: *"How has my &lt;measurement&gt; changed over time?"*, using a name from
    `list_test_names` (`get_test_trend`).
-5. Ask: *"Log me out of the NHS App."*
+5. Ask: *"What letters are in my record?"* (`list_documents`), then *"Read
+   me the latest one"* (`get_document`).
+6. Ask: *"Log me out of the NHS App."*
 
 If something goes wrong, set `NHS_MCP_DEBUG=1` (`claude mcp add -e
 NHS_MCP_DEBUG=1 …`). Each API call is then logged to stderr, by path and
@@ -54,6 +56,11 @@ The NHS App's API uses a cookie session, so there's no token to paste. The
 
 The browser profile is kept (in `~/Library/Application Support/nhs-mcp/browser`
 on macOS), so NHS login can remember the device and skip the security code.
+Some GP systems send test results a year at a time instead of all at once;
+for those, the tools fetch the last ten years unless given an earlier `since`,
+and say so. Others don't break results into values; for those,
+`get_test_result` fetches the result's text instead.
+
 Sessions end after about ten minutes idle, after which the tools tell the
 agent to call `login` again. The record is fetched once and cached for 15
 minutes.
@@ -67,6 +74,9 @@ minutes.
 | `get_test_result` | Every value in a result, with range, low/high flag and notes |
 | `get_test_trend` | One measurement over time, e.g. "Serum ferritin" |
 | `list_test_names` | Test and measurement names to search with |
+| `list_consultations` | Appointments: who you saw, and what they recorded under each heading |
+| `list_documents` | Letters, scans and attachments |
+| `get_document` | A document as text, or for scans and PDFs as page images the agent can read |
 | `get_medications`, `get_allergies`, `get_problems`, `get_immunisations` | The rest of the GP record |
 | `get_demographics` | Name, date of birth, address, NHS number |
 

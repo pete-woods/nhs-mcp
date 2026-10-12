@@ -8,8 +8,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
+	"slices"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/pete-woods/nhs-mcp/internal/client/nhsapp"
 	"github.com/pete-woods/nhs-mcp/internal/oauth"
@@ -48,8 +52,11 @@ type Manager struct {
 
 	mu      sync.Mutex
 	session *nhsapp.Session
-	record  *nhsapp.Record
-	fetched time.Time
+	// detailedResults is whether results need TestResultDetail.
+	detailedResults bool
+	record          *nhsapp.Record
+	fetched         time.Time
+	historic        map[int]nhsapp.TestResultsSection
 }
 
 func New(cfg Config) *Manager {
@@ -101,6 +108,10 @@ func (m *Manager) Login(ctx context.Context) (Status, error) {
 		return Status{}, fmt.Errorf("start NHS App session: %w", err)
 	}
 	m.session = &s
+	if r := s.ServiceJourneyRules; r != nil {
+		v := r.Journeys.IM1TestResults.Version
+		m.detailedResults = v != "" && v != "3"
+	}
 
 	// Start the GP session now, while NHS login still recognises the browser.
 	if err := m.startGPSession(ctx); err != nil {
@@ -154,8 +165,127 @@ func (m *Manager) Record(ctx context.Context) (nhsapp.Record, error) {
 	if err != nil {
 		return nhsapp.Record{}, err
 	}
-	m.record, m.fetched = &r, time.Now()
+	m.record, m.fetched, m.historic = &r, time.Now(), map[int]nhsapp.TestResultsSection{}
 	return r, nil
+}
+
+// maxParallel bounds concurrent requests to the NHS App.
+const maxParallel = 4
+
+// RecordFrom is Record, with older test results back to the start of
+// fromYear fetched too when the record doesn't already include them. It
+// also returns the years that couldn't be fetched.
+func (m *Manager) RecordFrom(ctx context.Context, fromYear int) (nhsapp.Record, []int, error) {
+	r, err := m.Record(ctx)
+	if err != nil || r.TestResults.HasAllHistoricResults {
+		return r, nil, err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var (
+		resMu   sync.Mutex
+		fetched = map[int]nhsapp.TestResultsSection{}
+		failed  []int
+	)
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(maxParallel)
+	for year := fromYear; year <= time.Now().Year(); year++ {
+		if _, ok := m.historic[year]; ok {
+			continue
+		}
+		g.Go(func() error {
+			h, err := m.cfg.App.HistoricTestResults(gctx, year)
+			if errors.Is(err, nhsapp.ErrNotLoggedIn) {
+				return err
+			}
+			resMu.Lock()
+			defer resMu.Unlock()
+			if err != nil {
+				slog.WarnContext(ctx, "Couldn't fetch historic test results", "year", year, "error", err)
+				failed = append(failed, year)
+				return nil
+			}
+			fetched[year] = h
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		if errors.Is(err, nhsapp.ErrNotLoggedIn) {
+			m.forget()
+		}
+		return nhsapp.Record{}, nil, err
+	}
+	maps.Copy(m.historic, fetched)
+	slices.Sort(failed)
+	have := slices.Concat(r.TestResults.Data, r.HistoricTestResults.Data)
+	r.HistoricTestResults.Data = slices.Concat(r.HistoricTestResults.Data, m.historicSince(have))
+	return r, failed, nil
+}
+
+// historicSince merges every cached historic year, leaving out results
+// already in current, so results found once can still be looked up by id.
+// The caller must hold m.mu.
+func (m *Manager) historicSince(current []nhsapp.TestResult) []nhsapp.TestResult {
+	seen := map[string]bool{}
+	for _, tr := range current {
+		seen[tr.ID] = true
+	}
+	var out []nhsapp.TestResult
+	for _, year := range slices.Sorted(maps.Keys(m.historic)) {
+		for _, tr := range m.historic[year].Data {
+			if !seen[tr.ID] {
+				seen[tr.ID] = true
+				out = append(out, tr)
+			}
+		}
+	}
+	return out
+}
+
+// TestResultDetail returns a result's detail as HTML, for GP systems whose
+// record doesn't break results into values. ok is false when the record
+// already has everything.
+func (m *Manager) TestResultDetail(ctx context.Context, id string) (string, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.detailedResults {
+		return "", false, nil
+	}
+	html, err := withGPSession(ctx, m, func(ctx context.Context) (string, error) {
+		return m.cfg.App.TestResultDetail(ctx, id)
+	})
+	return html, err == nil, err
+}
+
+var (
+	// ErrNoDocument means there's no document with that id in the record.
+	ErrNoDocument = errors.New("no document with that id")
+	// ErrDocumentUnavailable means the GP system can't supply the document.
+	ErrDocumentUnavailable = errors.New("the GP system can't supply this document")
+)
+
+// Document fetches a document in the record for viewing.
+func (m *Manager) Document(ctx context.Context, id string) (nhsapp.Document, nhsapp.DocumentContent, error) {
+	r, err := m.Record(ctx)
+	if err != nil {
+		return nhsapp.Document{}, nhsapp.DocumentContent{}, err
+	}
+	i := slices.IndexFunc(r.Documents.Data, func(d nhsapp.Document) bool { return d.DocumentIdentifier == id })
+	if i < 0 {
+		return nhsapp.Document{}, nhsapp.DocumentContent{}, ErrNoDocument
+	}
+	d := r.Documents.Data[i]
+	if !d.IsAvailable || !d.IsValidFile {
+		return d, nhsapp.DocumentContent{}, ErrDocumentUnavailable
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, err := withGPSession(ctx, m, func(ctx context.Context) (nhsapp.DocumentContent, error) {
+		return m.cfg.App.Document(ctx, d)
+	})
+	return d, c, err
 }
 
 // Demographics returns the patient's details as their GP has them.
@@ -237,5 +367,5 @@ func (m *Manager) status() Status {
 
 // forget drops the session and anything read with it.
 func (m *Manager) forget() {
-	m.session, m.record = nil, nil
+	m.session, m.record, m.historic, m.detailedResults = nil, nil, nil, false
 }
