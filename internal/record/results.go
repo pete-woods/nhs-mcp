@@ -27,8 +27,9 @@ const (
 // Filter selects test results. Zero fields match everything.
 type Filter struct {
 	Since, Until time.Time
-	// Name matches, case-insensitively, part of the result's name or the name
-	// of any value in it.
+	// Name matches part of the result's name or the name of any value in it,
+	// ignoring case and punctuation, or a common name for the same test (e.g.
+	// "vitamin d" for "Serum 25-OH vitamin D3 level").
 	Name string
 	// OutOfRange keeps only results with a value outside its range.
 	OutOfRange bool
@@ -45,7 +46,7 @@ func Results(r nhsapp.Record) []nhsapp.TestResult {
 
 // Find returns the results matching f, newest first.
 func Find(r nhsapp.Record, f Filter) []nhsapp.TestResult {
-	name := strings.ToLower(f.Name)
+	name := newNameQuery(f.Name)
 	var found []nhsapp.TestResult
 	for _, tr := range Results(r) {
 		at := tr.Date.Time()
@@ -55,7 +56,7 @@ func Find(r nhsapp.Record, f Filter) []nhsapp.TestResult {
 		if !f.Until.IsZero() && !at.Before(f.Until) {
 			continue
 		}
-		if name != "" && !matchesName(tr, name) {
+		if f.Name != "" && !matchesName(tr, name) {
 			continue
 		}
 		if f.OutOfRange && len(OutOfRange(tr)) == 0 {
@@ -124,15 +125,14 @@ type Point struct {
 	Value    nhsapp.TestResultValue
 }
 
-// Trend returns every measurement named name, oldest first. An exact,
-// case-insensitive name match wins; failing that, measurements whose names
-// contain name are used. It also returns the measurement names it matched.
+// Trend returns every measurement named name, oldest first, ignoring case and
+// punctuation. An exact match wins; failing that, measurements whose names
+// contain name are used, and failing that, those with a common name for it
+// (e.g. "Serum 25-OH vitamin D3 level" for "vitamin d"). It also returns the
+// measurement names it matched.
 func Trend(r nhsapp.Record, name string) ([]Point, []string) {
-	want := strings.ToLower(name)
-	exact := func(term string) bool { return strings.ToLower(term) == want }
-	partial := func(term string) bool { return strings.Contains(strings.ToLower(term), want) }
-
-	for _, match := range []func(string) bool{exact, partial} {
+	q := newNameQuery(name)
+	for _, match := range []func(string) bool{q.exact, q.contains, q.alias} {
 		var points []Point
 		names := map[string]bool{}
 		for _, tr := range Results(r) {
@@ -173,12 +173,12 @@ func Names(r nhsapp.Record) (tests, measurements []Name) {
 	return sortNames(testNames), sortNames(valueNames)
 }
 
-func matchesName(tr nhsapp.TestResult, lowerName string) bool {
-	if strings.Contains(strings.ToLower(tr.Term), lowerName) {
+func matchesName(tr nhsapp.TestResult, q nameQuery) bool {
+	if q.matches(tr.Term) {
 		return true
 	}
 	return slices.ContainsFunc(tr.Values, func(v nhsapp.TestResultValue) bool {
-		return strings.Contains(strings.ToLower(v.Term), lowerName)
+		return q.matches(v.Term)
 	})
 }
 

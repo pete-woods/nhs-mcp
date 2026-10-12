@@ -51,6 +51,16 @@ func TestListTestResults(t *testing.T) {
 			want: []string{"result-renal-2022"},
 		},
 		{
+			name: "ignoring punctuation",
+			args: map[string]any{"name": "c-reactive protein"},
+			want: []string{"result-crp-2022"},
+		},
+		{
+			name: "by a common name",
+			args: map[string]any{"name": "Kidney"},
+			want: []string{"result-renal-2022"},
+		},
+		{
 			name: "out of range only",
 			args: map[string]any{"out_of_range_only": true},
 			want: []string{"result-fbc-2024", "result-ferritin-2023"},
@@ -72,6 +82,14 @@ func TestListTestResults(t *testing.T) {
 			assert.Check(t, cmp.DeepEqual(ids(got.Results), tt.want))
 		})
 	}
+
+	t.Run("says why nothing matched", func(t *testing.T) {
+		got := mcptest.Call[listResults](t, fix.cs, "list_test_results", map[string]any{"name": "cholesterol"})
+		assert.Check(t, cmp.Contains(got.Note, `No test or measurement in the searched results is named "cholesterol"`))
+
+		got = mcptest.Call[listResults](t, fix.cs, "list_test_results", map[string]any{"name": "ferritin"})
+		assert.Check(t, cmp.Equal(got.Note, ""))
+	})
 
 	t.Run("limit truncates", func(t *testing.T) {
 		got := mcptest.Call[listResults](t, fix.cs, "list_test_results", map[string]any{"limit": 2})
@@ -144,6 +162,12 @@ func TestGetTestTrend(t *testing.T) {
 		assert.Check(t, cmp.Len(got.Points, 4))
 	})
 
+	t.Run("common names", func(t *testing.T) {
+		got := mcptest.Call[trend](t, fix.cs, "get_test_trend", map[string]any{"name": "kidney"})
+		assert.Check(t, cmp.DeepEqual(got.Measurements, []string{"eGFR using creatinine (CKD-EPI)"}))
+		assert.Check(t, cmp.Len(got.Points, 1))
+	})
+
 	t.Run("since", func(t *testing.T) {
 		got := mcptest.Call[trend](t, fix.cs, "get_test_trend", map[string]any{"name": "serum ferritin", "since": "2024-01-01"})
 		assert.Check(t, cmp.Len(got.Points, 1))
@@ -151,7 +175,9 @@ func TestGetTestTrend(t *testing.T) {
 
 	t.Run("no match", func(t *testing.T) {
 		got := mcptest.Call[trend](t, fix.cs, "get_test_trend", map[string]any{"name": "cholesterol"})
-		assert.Check(t, cmp.DeepEqual(got, trend{Measurements: []string{}, Points: []trendPoint{}}))
+		assert.Check(t, cmp.DeepEqual(got.Measurements, []string{}))
+		assert.Check(t, cmp.DeepEqual(got.Points, []trendPoint{}))
+		assert.Check(t, cmp.Contains(got.Note, "list_test_names lists every name"))
 	})
 
 	t.Run("name is required", func(t *testing.T) {
@@ -182,6 +208,7 @@ type listResults struct {
 	Matched   int             `json:"matched"`
 	Truncated bool            `json:"truncated"`
 	Warning   string          `json:"warning"`
+	Note      string          `json:"note"`
 }
 
 type measurement struct {
@@ -214,6 +241,7 @@ type trendPoint struct {
 type trend struct {
 	Measurements []string     `json:"measurements"`
 	Points       []trendPoint `json:"points"`
+	Note         string       `json:"note"`
 }
 
 type name struct {

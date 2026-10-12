@@ -62,6 +62,91 @@ func TestDate_String(t *testing.T) {
 	}
 }
 
+func TestFind_Names(t *testing.T) {
+	r := recordOf(
+		result("lipids", "CVD PP Lipid profile", "Serum cholesterol/HDL ratio", "Se non HDL cholesterol level", "Serum triglycerides"),
+		result("psa", "PSA", "Se prostate specific Ag level"),
+		result("hba1c", "HbA1c level (DCCT aligned)", "HbA1c levl - IFCC standardised"),
+		result("bp", "O/E - blood pressure reading", "Systolic arterial pressure", "Diastolic arterial pressure"),
+		result("vitd", "Vitamin D", "Serum 25-OH vitamin D3 level"),
+		result("renal", "Renal profile", "eGFRcreat (CKD-EPI)/1.73 m*2", "Serum sodium"),
+		result("lft", "Liver function test", "Serum ALT level"),
+	)
+	tests := []struct {
+		name string
+		want []string
+	}{
+		{name: "lipid", want: []string{"lipids"}},
+		{name: "lipids", want: []string{"lipids"}},
+		{name: "cholesterol hdl ratio", want: []string{"lipids"}},
+		{name: "serum non-HDL cholesterol", want: []string{"lipids"}},
+		{name: "triglyceride", want: []string{"lipids"}},
+		{name: "prostate specific antigen", want: []string{"psa"}},
+		{name: "hba1c level", want: []string{"hba1c"}},
+		{name: "blood sugar", want: []string{"hba1c"}},
+		{name: "blood pressure", want: []string{"bp"}},
+		{name: "BP", want: []string{"bp"}},
+		{name: "vit d", want: []string{"vitd"}},
+		{name: "25-hydroxyvitamin D", want: []string{"vitd"}},
+		{name: "kidney function", want: []string{"renal"}},
+		{name: "egfr", want: []string{"renal"}},
+		{name: "U&E", want: []string{"renal"}},
+		{name: "LFTs", want: []string{"lft"}},
+		{name: "alanine aminotransferase", want: []string{"lft"}},
+		{name: "ess", want: nil},
+		{name: "ferritin", want: nil},
+		{name: "salt", want: nil},
+	}
+	for _, tt := range tests {
+		var got []string
+		for _, tr := range record.Find(r, record.Filter{Name: tt.name}) {
+			got = append(got, tr.ID)
+		}
+		assert.Check(t, cmp.DeepEqual(got, tt.want), "name %q", tt.name)
+	}
+}
+
+func TestTrend_Names(t *testing.T) {
+	r := recordOf(
+		result("bp", "O/E - blood pressure reading", "Systolic arterial pressure", "Diastolic arterial pressure"),
+		result("vitd", "Vitamin D", "Serum 25-OH vitamin D3 level", "Serum vitamin D2 level"),
+		result("psa", "PSA", "Se prostate specific Ag level"),
+	)
+
+	t.Run("exact ignores punctuation and abbreviations", func(t *testing.T) {
+		_, names := record.Trend(r, "serum prostate specific antigen level")
+		assert.Check(t, cmp.DeepEqual(names, []string{"Se prostate specific Ag level"}))
+	})
+
+	t.Run("contains wins over common names", func(t *testing.T) {
+		_, names := record.Trend(r, "vitamin d")
+		assert.Check(t, cmp.DeepEqual(names, []string{"Serum 25-OH vitamin D3 level", "Serum vitamin D2 level"}))
+	})
+
+	t.Run("common names include vitamin D2 and D3", func(t *testing.T) {
+		_, names := record.Trend(r, "vit d")
+		assert.Check(t, cmp.DeepEqual(names, []string{"Serum 25-OH vitamin D3 level", "Serum vitamin D2 level"}))
+	})
+
+	t.Run("common names", func(t *testing.T) {
+		points, names := record.Trend(r, "blood pressure")
+		assert.Check(t, cmp.DeepEqual(names, []string{"Diastolic arterial pressure", "Systolic arterial pressure"}))
+		assert.Check(t, cmp.Len(points, 2))
+	})
+}
+
+func recordOf(results ...nhsapp.TestResult) nhsapp.Record {
+	return nhsapp.Record{TestResults: nhsapp.TestResultsSection{Data: results}}
+}
+
+func result(id, term string, values ...string) nhsapp.TestResult {
+	tr := nhsapp.TestResult{ID: id, Term: term}
+	for _, v := range values {
+		tr.Values = append(tr.Values, nhsapp.TestResultValue{Term: v})
+	}
+	return tr
+}
+
 func ptr(f float64) *float64 {
 	return &f
 }
