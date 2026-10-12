@@ -8,7 +8,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/url"
+	"os"
 	"sync"
 
 	"github.com/go-rod/rod"
@@ -130,10 +132,11 @@ func (a *Authorizer) open() (*rod.Browser, error) {
 	if a.cfg.ProfileDir != "" {
 		l = l.UserDataDir(a.cfg.ProfileDir)
 	}
-	if a.cfg.Bin != "" {
-		l = l.Bin(a.cfg.Bin)
+	bin, err := a.bin()
+	if err != nil {
+		return nil, err
 	}
-	controlURL, err := l.Launch()
+	controlURL, err := l.Bin(bin).Launch()
 	if err != nil {
 		return nil, fmt.Errorf("browser: launch: %w", err)
 	}
@@ -145,4 +148,23 @@ func (a *Authorizer) open() (*rod.Browser, error) {
 	}
 	a.launcher, a.browser = l, b
 	return b, nil
+}
+
+// bin finds Chrome: the configured one, else an installed one, else a
+// downloaded Chromium. Download progress goes to stderr: stdout is the MCP
+// stream, where the launcher would otherwise print it.
+func (a *Authorizer) bin() (string, error) {
+	if a.cfg.Bin != "" {
+		return a.cfg.Bin, nil
+	}
+	if bin, ok := launcher.LookPath(); ok {
+		return bin, nil
+	}
+	b := launcher.NewBrowser()
+	b.Logger = log.New(os.Stderr, "[browser download] ", log.LstdFlags)
+	bin, err := b.Get()
+	if err != nil {
+		return "", fmt.Errorf("browser: download Chromium (or set NHS_MCP_BROWSER): %w", err)
+	}
+	return bin, nil
 }
