@@ -34,7 +34,8 @@ func TestAuthorizer(t *testing.T) {
 		PKCE:        oauth.NewPKCE(),
 	}.URL(nhs.LoginURL())
 
-	// Twice, to check the browser is reused between authorizations.
+	// Twice, to check the browser and its window are reused between
+	// authorizations.
 	for range 2 {
 		got, err := a.Authorize(t.Context(), authURL, redirectURI)
 		assert.NilError(t, err)
@@ -43,6 +44,22 @@ func TestAuthorizer(t *testing.T) {
 		assert.NilError(t, err)
 		assert.Check(t, code != "")
 	}
+	pages, err := a.Pages()
+	assert.NilError(t, err)
+	assert.Check(t, cmp.Len(pages, 1))
+
+	t.Run("opens a new window if the user closed it", func(t *testing.T) {
+		pages, err := a.Pages()
+		assert.NilError(t, err)
+		assert.Assert(t, cmp.Len(pages, 1))
+		assert.NilError(t, pages[0].Close())
+
+		_, err = a.Authorize(t.Context(), authURL, redirectURI)
+		assert.NilError(t, err)
+		pages, err = a.Pages()
+		assert.NilError(t, err)
+		assert.Check(t, cmp.Len(pages, 1))
+	})
 
 	t.Run("waits for the user to sign in", func(t *testing.T) {
 		nhs.SetInteractive(true)

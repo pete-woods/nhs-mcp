@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"slices"
 	"sync"
 
 	"github.com/go-rod/rod"
@@ -35,15 +36,17 @@ type Config struct {
 	NoSandbox bool
 }
 
-// Authorizer is an oauth.Authorizer that drives a browser. The browser stays
-// open between calls, so a silent re-authorization can reuse NHS login's
-// cookies, until Close.
+// Authorizer is an oauth.Authorizer that drives a browser. The browser and its
+// window stay open between calls, until Close, so a silent re-authorization
+// can reuse NHS login's cookies, and happens in the window the user signed in
+// with rather than flashing up a new one.
 type Authorizer struct {
 	cfg Config
 
 	mu       sync.Mutex
 	launcher *launcher.Launcher
 	browser  *rod.Browser
+	page     *rod.Page
 }
 
 func New(cfg Config) *Authorizer {
@@ -72,11 +75,10 @@ func (a *Authorizer) Authorize(ctx context.Context, authorizeURL, redirectURI st
 	go router.Run()
 	defer func() { _ = router.Stop() }()
 
-	page, err := b.Page(proto.TargetCreateTarget{})
+	page, err := a.window(b)
 	if err != nil {
-		return nil, fmt.Errorf("browser: open window: %w", err)
+		return nil, err
 	}
-	defer func() { _ = page.Close() }()
 	if err := page.Context(ctx).Navigate(authorizeURL); err != nil {
 		select {
 		case u := <-got:
@@ -118,7 +120,7 @@ func (a *Authorizer) Close() error {
 	}
 	err := a.browser.Close()
 	a.launcher.Kill()
-	a.browser, a.launcher = nil, nil
+	a.browser, a.launcher, a.page = nil, nil, nil
 	return err
 }
 
@@ -152,6 +154,28 @@ func (a *Authorizer) open() (*rod.Browser, error) {
 	}
 	a.launcher, a.browser = l, b
 	return b, nil
+}
+
+// window returns the page logins happen in, opening it if this is the first
+// login or the user closed it.
+func (a *Authorizer) window(b *rod.Browser) (*rod.Page, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.page != nil {
+		pages, err := b.Pages()
+		if err != nil {
+			return nil, fmt.Errorf("browser: list windows: %w", err)
+		}
+		if slices.ContainsFunc(pages, func(p *rod.Page) bool { return p.TargetID == a.page.TargetID }) {
+			return a.page, nil
+		}
+	}
+	page, err := b.Page(proto.TargetCreateTarget{})
+	if err != nil {
+		return nil, fmt.Errorf("browser: open window: %w", err)
+	}
+	a.page = page
+	return page, nil
 }
 
 // bin finds Chrome: the configured one, else an installed one, else a
