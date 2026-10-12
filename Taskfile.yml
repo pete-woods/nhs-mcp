@@ -82,7 +82,7 @@ tasks:
     desc: Run tests with JUnit output
     cmds:
       - mkdir -p "{{.RESULTS_DIR}}"
-      - circleci testsuite run "ci tests"
+      - go tool -modfile tools/go.mod gotestsum --junitfile "{{.RESULTS_DIR}}/junit.xml" -- -race -count=1 ./...
 
   ci:check:
     desc: Run all static checks, with JUnit output

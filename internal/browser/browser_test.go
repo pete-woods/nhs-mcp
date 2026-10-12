@@ -2,6 +2,7 @@ package browser_test
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"testing"
@@ -22,7 +23,7 @@ func TestAuthorizer(t *testing.T) {
 	}
 
 	nhs := fakenhs.New(t)
-	a := browser.New(browser.Config{Bin: bin, ProfileDir: t.TempDir(), Headless: true})
+	a := browser.New(browser.Config{Bin: bin, ProfileDir: t.TempDir(), Headless: true, NoSandbox: os.Getenv("CI") != ""})
 	t.Cleanup(func() { assert.Check(t, a.Close()) })
 
 	redirectURI := fakenhs.WebURL + "/auth-return"

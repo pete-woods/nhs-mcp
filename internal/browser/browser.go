@@ -30,6 +30,9 @@ type Config struct {
 	ProfileDir string
 	// Headless hides the window, for tests.
 	Headless bool
+	// NoSandbox turns off Chrome's sandbox, which CI machines often can't
+	// provide. Only for tests: the login page is the real NHS login.
+	NoSandbox bool
 }
 
 // Authorizer is an oauth.Authorizer that drives a browser. The browser stays
@@ -128,7 +131,8 @@ func (a *Authorizer) open() (*rod.Browser, error) {
 
 	l := launcher.New().
 		Leakless(false).
-		Headless(a.cfg.Headless)
+		Headless(a.cfg.Headless).
+		NoSandbox(a.cfg.NoSandbox)
 	if a.cfg.ProfileDir != "" {
 		l = l.UserDataDir(a.cfg.ProfileDir)
 	}
