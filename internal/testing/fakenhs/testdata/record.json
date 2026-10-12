@@ -1,0 +1,124 @@
+{
+  "response": {
+    "hasSummaryRecordAccess": true,
+    "hasDetailedRecordAccess": true,
+    "supplier": "EMIS",
+    "allergies": {
+      "hasAccess": true,
+      "hasErrored": false,
+      "recordCount": 1,
+      "hasUndeterminedAccess": false,
+      "data": [
+        {"name": "Peanut allergy", "date": {"value": "2001-05-20T00:00:00+00:00", "datePart": "YearMonthDay"}, "drug": null, "reaction": null}
+      ]
+    },
+    "medications": {
+      "hasAccess": true,
+      "hasErrored": false,
+      "recordCount": 3,
+      "errors": null,
+      "hasUndeterminedAccess": false,
+      "data": {
+        "acuteMedications": [
+          {"date": "2024-02-01T00:00:00+00:00", "lineItems": [{"text": "Amoxicillin 500mg capsules", "lineItems": []}, {"text": "One Three Times A Day", "lineItems": []}, {"text": "21 capsule", "lineItems": []}]}
+        ],
+        "currentRepeatMedications": [
+          {"date": "2023-11-10T00:00:00+00:00", "lineItems": [{"text": "Ferrous fumarate 210mg tablets", "lineItems": []}, {"text": "One Twice A Day", "lineItems": []}]}
+        ],
+        "discontinuedRepeatMedications": [
+          {"date": "2019-04-02T00:00:00+00:00", "lineItems": [{"text": "Salbutamol 100micrograms/dose inhaler", "lineItems": []}]}
+        ]
+      }
+    },
+    "immunisations": {
+      "hasAccess": true,
+      "hasErrored": false,
+      "recordCount": 2,
+      "hasUndeterminedAccess": false,
+      "data": [
+        {"term": "Influenza vaccination", "associatedText": [], "effectiveDate": {"value": "2023-10-05T00:00:00+00:00", "datePart": "YearMonthDay"}, "status": null, "nextDate": null},
+        {"term": "Tetanus booster", "associatedText": [], "effectiveDate": {"value": "1999-01-01T00:00:00+00:00", "datePart": "Year"}, "status": null, "nextDate": null}
+      ]
+    },
+    "testResults": {
+      "hasAccess": true,
+      "hasErrored": false,
+      "recordCount": 6,
+      "hasUndeterminedAccess": false,
+      "hasAllHistoricResults": true,
+      "data": [
+        {
+          "id": "result-ferritin-2023", "date": {"value": "2023-06-01T00:00:00+00:00", "datePart": "YearMonthDay"},
+          "description": null, "term": "Serum ferritin", "supplierTypeCode": "1", "snomedConceptId": null, "supportingContent": null,
+          "associatedTexts": [{"text": "(dr.example) - Abnormal - start iron", "textType": "UC"}],
+          "testResultValues": [
+            {"isHeadlineResult": true, "description": "Serum ferritin: 9 ug/L (normal range: 15 - 150)", "term": "Serum ferritin", "range": {"minimum": "15", "maximum": "150", "units": "ug/L"}, "supplierTypeCode": "2", "snomedConceptId": null, "supportingContent": null, "displayValue": "9 ug/L", "numericValue": 9.0, "numericOperator": null, "associatedTexts": [], "units": "ug/L"}
+          ]
+        },
+        {
+          "id": "result-fbc-2024", "date": {"value": "2024-03-14T09:30:00+00:00", "datePart": "YearMonthDay"},
+          "description": null, "term": "Full blood count - FBC", "supplierTypeCode": "3", "snomedConceptId": null, "supportingContent": null,
+          "associatedTexts": [],
+          "testResultValues": [
+            {"isHeadlineResult": false, "description": "Haemoglobin concentration: 112 g/L (normal range: 115 - 165)", "term": "Haemoglobin concentration", "range": {"minimum": "115", "maximum": "165", "units": "g/L"}, "supplierTypeCode": "4", "snomedConceptId": null, "supportingContent": null, "displayValue": "112 g/L", "numericValue": 112.0, "numericOperator": null, "associatedTexts": [], "units": "g/L"},
+            {"isHeadlineResult": false, "description": "White blood cell count: 6.1 10*9/L (normal range: 4 - 11)", "term": "White blood cell count", "range": {"minimum": "4", "maximum": "11", "units": "10*9/L"}, "supplierTypeCode": "5", "snomedConceptId": null, "supportingContent": null, "displayValue": "6.1 10*9/L", "numericValue": 6.1, "numericOperator": null, "associatedTexts": [], "units": "10*9/L"}
+          ]
+        },
+        {
+          "id": "result-ferritin-2024", "date": {"value": "2024-03-14T09:30:00+00:00", "datePart": "YearMonthDay"},
+          "description": null, "term": "Serum ferritin", "supplierTypeCode": "1", "snomedConceptId": null, "supportingContent": null,
+          "associatedTexts": [],
+          "testResultValues": [
+            {"isHeadlineResult": true, "description": "Serum ferritin: 22 ug/L (normal range: 15 - 150)", "term": "Serum ferritin", "range": {"minimum": "15", "maximum": "150", "units": "ug/L"}, "supplierTypeCode": "2", "snomedConceptId": null, "supportingContent": null, "displayValue": "22 ug/L", "numericValue": 22.0, "numericOperator": null, "associatedTexts": [{"text": "Assay changed March 2024", "textType": "RC"}], "units": "ug/L"}
+          ]
+        },
+        {
+          "id": "result-renal-2022", "date": {"value": "2022-01-10T00:00:00+00:00", "datePart": "YearMonthDay"},
+          "description": null, "term": "Renal profile", "supplierTypeCode": "6", "snomedConceptId": null, "supportingContent": null,
+          "associatedTexts": [],
+          "testResultValues": [
+            {"isHeadlineResult": false, "description": "Serum sodium: 140 mmol/L (normal range: 133 - 145)", "term": "Serum sodium", "range": {"minimum": "133", "maximum": "145", "units": "mmol/L"}, "supplierTypeCode": "7", "snomedConceptId": null, "supportingContent": null, "displayValue": "140 mmol/L", "numericValue": 140.0, "numericOperator": null, "associatedTexts": [], "units": "mmol/L"},
+            {"isHeadlineResult": false, "description": "eGFR: > 90 mL/min", "term": "eGFR using creatinine (CKD-EPI)", "range": {"minimum": null, "maximum": null, "units": null}, "supplierTypeCode": "8", "snomedConceptId": null, "supportingContent": null, "displayValue": "> 90 mL/min", "numericValue": 90.0, "numericOperator": ">", "associatedTexts": [], "units": "mL/min"}
+          ]
+        },
+        {
+          "id": "result-crp-2022", "date": {"value": "2022-01-10T00:00:00+00:00", "datePart": "YearMonthDay"},
+          "description": null, "term": "CRP", "supplierTypeCode": "9", "snomedConceptId": null, "supportingContent": null,
+          "associatedTexts": [],
+          "testResultValues": [
+            {"isHeadlineResult": true, "description": "Serum C reactive protein level: < 1 mg/L (normal range: - 10)", "term": "Serum C reactive protein level", "range": {"minimum": null, "maximum": "10", "units": "mg/L"}, "supplierTypeCode": "10", "snomedConceptId": null, "supportingContent": null, "displayValue": "< 1 mg/L", "numericValue": 1.0, "numericOperator": "<", "associatedTexts": [], "units": "mg/L"}
+          ]
+        },
+        {
+          "id": "result-urine-2010", "date": {"value": "2010-01-01T00:00:00+00:00", "datePart": "Year"},
+          "description": null, "term": "Urine dipstick", "supplierTypeCode": "11", "snomedConceptId": null, "supportingContent": null,
+          "associatedTexts": [],
+          "testResultValues": [
+            {"isHeadlineResult": false, "description": "Urine protein: NEGATIVE", "term": "Urine protein", "range": {"minimum": null, "maximum": null, "units": null}, "supplierTypeCode": "12", "snomedConceptId": null, "supportingContent": null, "displayValue": "NEGATIVE", "numericValue": null, "numericOperator": null, "associatedTexts": [], "units": null}
+          ]
+        }
+      ]
+    },
+    "historicTestResults": {
+      "hasAccess": true,
+      "hasErrored": false,
+      "recordCount": 0,
+      "hasUndeterminedAccess": false,
+      "hasAllHistoricResults": false,
+      "data": []
+    },
+    "problems": {
+      "hasAccess": true,
+      "hasErrored": false,
+      "recordCount": 2,
+      "hasUndeterminedAccess": false,
+      "data": [
+        {"effectiveDate": {"value": "2015-01-01T00:00:00+00:00", "datePart": "Year"}, "lineItems": [{"text": "Asthma", "lineItems": null}, {"text": "Status: Past", "lineItems": null}, {"text": "Notes", "lineItems": ["Nested as a bare string"]}]},
+        {"effectiveDate": {"value": "2023-06-01T00:00:00+00:00", "datePart": "YearMonthDay"}, "lineItems": [{"text": "Iron deficiency anaemia", "lineItems": null}, {"text": "Significance: Significant", "lineItems": null}, {"text": "Status: Active", "lineItems": null}]}
+      ]
+    },
+    "tppDcrEvents": {"hasAccess": true, "hasErrored": false, "recordCount": 0, "errors": null, "data": []},
+    "consultations": {"hasAccess": true, "hasErrored": false, "recordCount": 0, "data": []},
+    "documents": {"hasAccess": true, "hasErrored": false, "recordCount": 0, "data": []}
+  }
+}
