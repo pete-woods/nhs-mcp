@@ -117,6 +117,23 @@ func TestDocuments(t *testing.T) {
 		assert.Check(t, got.Truncated)
 	})
 
+	t.Run("a letter's pictures aren't pages", func(t *testing.T) {
+		logo := `<img src="data:image/png;base64,` + tinyPNG + `">`
+		fix.nhs.SetDocument("doc-letter", fakenhs.Document{HTML: logo + `<p>Dear Dr Example,</p>` + logo})
+
+		res := mcptest.Result(t, fix.cs, "get_document", map[string]any{"id": "doc-letter", "max_pages": 1})
+		assert.Assert(t, !res.IsError, "%v", res.Content)
+		got := structured[documentContent](t, res)
+		assert.Check(t, cmp.Equal(got.Pages, 0))
+		assert.Check(t, cmp.Equal(got.PagesReturned, 0))
+		assert.Check(t, cmp.Equal(got.Images, 2))
+		assert.Check(t, cmp.Equal(got.ImagesReturned, 1))
+		assert.Check(t, got.Truncated)
+		assert.Assert(t, cmp.Len(res.Content, 2), "the text, then a picture")
+		_, ok := res.Content[1].(*sdk.ImageContent)
+		assert.Check(t, ok, "%T", res.Content[1])
+	})
+
 	t.Run("unavailable and unknown documents", func(t *testing.T) {
 		assert.Check(t, cmp.Contains(mcptest.Error(t, fix.cs, "get_document", map[string]any{"id": "doc-missing"}), "can't supply this document"))
 		assert.Check(t, cmp.Contains(mcptest.Error(t, fix.cs, "get_document", map[string]any{"id": "nope"}), `no document with id "nope"`))
@@ -242,6 +259,8 @@ type documentContent struct {
 	document
 	Pages           int      `json:"pages"`
 	PagesReturned   int      `json:"pages_returned"`
+	Images          int      `json:"images"`
+	ImagesReturned  int      `json:"images_returned"`
 	Truncated       bool     `json:"truncated"`
 	Unshowable      int      `json:"unshowable_pages"`
 	UnshowableTypes []string `json:"unshowable_types"`
@@ -264,3 +283,6 @@ func structured[T any](t *testing.T, res *sdk.CallToolResult) T {
 	assert.NilError(t, json.Unmarshal(raw, &out))
 	return out
 }
+
+// tinyPNG is a 1x1 PNG.
+const tinyPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="

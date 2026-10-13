@@ -49,7 +49,7 @@ Filter by since/until (YYYY-MM-DD) and contains (part of the description or file
 	addTool(s, &sdk.Tool{
 		Name: "get_document",
 		Description: `Read a document from list_documents by id. Letters come back as a text resource; scans and PDFs come back as page images, which you can read.
-max_pages limits the images, default 5, at most 20; pages says how many there are. When a document without text (e.g. a PDF) can be downloaded, its original file is linked as a resource, file_uri, to read only if the text and images aren't enough.`,
+max_pages limits the images, default 5, at most 20; pages says how many there are, or for a letter, images says how many pictures (like logos) its text has. When a document without text (e.g. a PDF) can be downloaded, its original file is linked as a resource, file_uri, to read only if the text and images aren't enough.`,
 		Annotations: &sdk.ToolAnnotations{Title: "Get document", ReadOnlyHint: true},
 	}, a.getDocument)
 
@@ -176,9 +176,11 @@ type getDocumentInput struct {
 
 type getDocumentOutput struct {
 	document
-	Pages           int      `json:"pages" jsonschema:"How many page images the document has."`
+	Pages           int      `json:"pages" jsonschema:"How many page images a scan or PDF has."`
 	PagesReturned   int      `json:"pages_returned"`
-	Truncated       bool     `json:"truncated" jsonschema:"Whether some pages were left out; raise max_pages for more."`
+	Images          int      `json:"images,omitempty" jsonschema:"How many pictures, like logos, a letter's text has; they aren't pages."`
+	ImagesReturned  int      `json:"images_returned,omitempty"`
+	Truncated       bool     `json:"truncated" jsonschema:"Whether some pages or pictures were left out; raise max_pages for more."`
 	Unshowable      int      `json:"unshowable_pages,omitempty" jsonschema:"Pages in an image format MCP can't show."`
 	UnshowableTypes []string `json:"unshowable_types,omitempty"`
 	FileURI         string   `json:"file_uri,omitempty" jsonschema:"The original file, to read as an MCP resource, when it can be downloaded and there is no text."`
@@ -226,6 +228,11 @@ func (a *api) getDocument(ctx context.Context, _ *sdk.CallToolRequest, in getDoc
 		budget -= len(img.Data)
 		files = append(files, img)
 		out.PagesReturned++
+	}
+	// A letter's images are pictures in its text, not pages.
+	if text != "" {
+		out.Images, out.ImagesReturned = out.Pages, out.PagesReturned
+		out.Pages, out.PagesReturned = 0, 0
 	}
 	// A letter's text is already here: the NHS App downloads it as the same
 	// text, less its line breaks. The size isn't given, as the NHS App's
