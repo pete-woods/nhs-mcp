@@ -106,7 +106,7 @@ func TestDocuments(t *testing.T) {
 			URI:         "nhs-app://documents/doc-scan/file",
 			Name:        "Discharge summary",
 			Title:       "Scanned discharge summary",
-			Description: "The original pdf file.",
+			Description: "The original file, as the NHS App downloads it.",
 		}), "no size: the NHS App's sizes aren't those of the download")
 	})
 

@@ -49,7 +49,7 @@ Filter by since/until (YYYY-MM-DD) and contains (part of the description or file
 	addTool(s, &sdk.Tool{
 		Name: "get_document",
 		Description: `Read a document from list_documents by id. Letters come back as a text resource; scans and PDFs come back as page images, which you can read.
-max_pages limits the images, default 5, at most 20; pages says how many there are, or for a letter, images says how many pictures (like logos) its text has. When a document without text (e.g. a PDF) can be downloaded, its original file is linked as a resource, file_uri, to read only if the text and images aren't enough.`,
+max_pages limits the images, default 5, at most 20; pages says how many images the NHS App shows it as, which can differ from the file's own pages, or for a letter, images says how many pictures (like logos) its text has. When a document without text (e.g. a PDF) can be downloaded, its original file is linked as a resource, file_uri, to read only if the text and images aren't enough.`,
 		Annotations: &sdk.ToolAnnotations{Title: "Get document", ReadOnlyHint: true},
 	}, a.getDocument)
 
@@ -176,7 +176,7 @@ type getDocumentInput struct {
 
 type getDocumentOutput struct {
 	document
-	Pages           int      `json:"pages" jsonschema:"How many page images a scan or PDF has."`
+	Pages           int      `json:"pages" jsonschema:"How many page images the NHS App shows a scan or PDF as. These can differ from the file's own pages: it can split one page into two images."`
 	PagesReturned   int      `json:"pages_returned"`
 	Images          int      `json:"images,omitempty" jsonschema:"How many pictures, like logos, a letter's text has; they aren't pages."`
 	ImagesReturned  int      `json:"images_returned,omitempty"`
@@ -240,10 +240,11 @@ func (a *api) getDocument(ctx context.Context, _ *sdk.CallToolRequest, in getDoc
 	if content.IsDownloadable && text == "" {
 		out.FileURI = documentURI(d.DocumentIdentifier) + documentFileSuffix
 		files = append(files, &sdk.ResourceLink{
-			URI:         out.FileURI,
-			Name:        d.Name,
-			Title:       d.Term,
-			Description: fmt.Sprintf("The original %s file.", out.Type),
+			URI:   out.FileURI,
+			Name:  d.Name,
+			Title: d.Term,
+			// Not the listed type: the NHS App can download a "tif" as a GIF.
+			Description: "The original file, as the NHS App downloads it.",
 		})
 	}
 	return &sdk.CallToolResult{Content: files}, out, nil
