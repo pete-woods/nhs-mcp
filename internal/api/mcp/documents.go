@@ -3,10 +3,10 @@ package mcp
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"slices"
 	"strings"
@@ -31,23 +31,23 @@ const (
 )
 
 func (a *api) addDocumentTools(s *sdk.Server) {
-	sdk.AddTool(s, &sdk.Tool{
+	addTool(s, &sdk.Tool{
 		Name: "list_consultations",
 		Description: `List the user's consultations with their GP practice, newest first: the date, who they saw, and what was recorded under each heading (History, Examination, Problem, Medication, ...).
 Filter by since/until (YYYY-MM-DD) and contains (text anywhere in the consultation, any case). limit defaults to 20, at most 200; truncated says there were more.`,
 		Annotations: &sdk.ToolAnnotations{Title: "List consultations", ReadOnlyHint: true},
 	}, a.listConsultations)
 
-	sdk.AddTool(s, &sdk.Tool{
+	addTool(s, &sdk.Tool{
 		Name: "list_documents",
 		Description: `List the letters, scans and attachments in the user's GP record, newest first: id, date, description, file type and size, and whether it can be opened.
 Filter by since/until (YYYY-MM-DD) and contains (part of the description or file name, any case). limit defaults to 50, at most 500. Pass an id to get_document to read one.`,
 		Annotations: &sdk.ToolAnnotations{Title: "List documents", ReadOnlyHint: true},
 	}, a.listDocuments)
 
-	sdk.AddTool(s, &sdk.Tool{
+	addTool(s, &sdk.Tool{
 		Name: "get_document",
-		Description: `Read a document from list_documents by id. Letters come back as text; scans and PDFs come back as page images, which you can read.
+		Description: `Read a document from list_documents by id. Letters come back as a text resource; scans and PDFs come back as page images, which you can read.
 max_pages limits the images, default 5, at most 20; pages says how many there are.`,
 		Annotations: &sdk.ToolAnnotations{Title: "Get document", ReadOnlyHint: true},
 	}, a.getDocument)
@@ -168,7 +168,6 @@ type getDocumentInput struct {
 
 type getDocumentOutput struct {
 	document
-	Text            string   `json:"text,omitempty"`
 	Pages           int      `json:"pages" jsonschema:"How many page images the document has."`
 	PagesReturned   int      `json:"pages_returned"`
 	Truncated       bool     `json:"truncated" jsonschema:"Whether some pages were left out; raise max_pages for more."`
@@ -188,7 +187,16 @@ func (a *api) getDocument(ctx context.Context, _ *sdk.CallToolRequest, in getDoc
 		return nil, nil, fmt.Errorf("the NHS App can't show this %s document", d.Extension)
 	}
 
-	out := &getDocumentOutput{document: toDocument(d), Text: htmltext.Text(content.Content)}
+	out := &getDocumentOutput{document: toDocument(d)}
+	// Never nil, so the SDK doesn't add the output as text.
+	files := []sdk.Content{}
+	if text := htmltext.Text(content.Content); text != "" {
+		files = append(files, &sdk.EmbeddedResource{Resource: &sdk.ResourceContents{
+			URI:      documentURI(d.DocumentIdentifier),
+			MIMEType: "text/plain",
+			Text:     text,
+		}})
+	}
 	images, skipped := pageImages(content.Content)
 	out.Pages = len(images) + len(skipped)
 	out.Unshowable = len(skipped)
@@ -199,23 +207,22 @@ func (a *api) getDocument(ctx context.Context, _ *sdk.CallToolRequest, in getDoc
 	}
 	limit = min(limit, maxPages)
 
-	var pages []sdk.Content
 	budget := maxImageBytes
 	for _, img := range images {
-		if len(pages) == limit || len(img.Data) > budget {
+		if out.PagesReturned == limit || len(img.Data) > budget {
 			out.Truncated = true
 			break
 		}
 		budget -= len(img.Data)
-		pages = append(pages, img)
+		files = append(files, img)
+		out.PagesReturned++
 	}
-	out.PagesReturned = len(pages)
+	return &sdk.CallToolResult{Content: files}, out, nil
+}
 
-	summary, err := json.Marshal(out)
-	if err != nil {
-		return nil, nil, err
-	}
-	return &sdk.CallToolResult{Content: slices.Concat([]sdk.Content{&sdk.TextContent{Text: string(summary)}}, pages)}, out, nil
+// documentURI names a document in the resources get_document returns.
+func documentURI(id string) string {
+	return "nhs-app://documents/" + url.PathEscape(id)
 }
 
 // dataImage matches the inline images the NHS App renders scans and PDFs as.

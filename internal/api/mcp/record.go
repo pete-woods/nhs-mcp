@@ -11,31 +11,31 @@ import (
 )
 
 func (a *api) addRecordTools(s *sdk.Server) {
-	sdk.AddTool(s, &sdk.Tool{
+	addTool(s, &sdk.Tool{
 		Name:        "get_medications",
 		Description: `Get the user's medications from their GP record: current repeat prescriptions, acute (one-off) prescriptions, and, with include_discontinued, stopped repeats. Each is the GP's free text: drug, dosage, quantity.`,
 		Annotations: &sdk.ToolAnnotations{Title: "Get medications", ReadOnlyHint: true},
 	}, a.getMedications)
 
-	sdk.AddTool(s, &sdk.Tool{
+	addTool(s, &sdk.Tool{
 		Name:        "get_allergies",
 		Description: `Get the allergies and adverse reactions in the user's GP record.`,
 		Annotations: &sdk.ToolAnnotations{Title: "Get allergies", ReadOnlyHint: true},
 	}, a.getAllergies)
 
-	sdk.AddTool(s, &sdk.Tool{
+	addTool(s, &sdk.Tool{
 		Name:        "get_problems",
 		Description: `Get the coded problems (conditions and diagnoses) in the user's GP record, newest first, with details such as status and significance. active_only keeps those marked active.`,
 		Annotations: &sdk.ToolAnnotations{Title: "Get problems", ReadOnlyHint: true},
 	}, a.getProblems)
 
-	sdk.AddTool(s, &sdk.Tool{
+	addTool(s, &sdk.Tool{
 		Name:        "get_immunisations",
 		Description: `Get the immunisations in the user's GP record, newest first.`,
 		Annotations: &sdk.ToolAnnotations{Title: "Get immunisations", ReadOnlyHint: true},
 	}, a.getImmunisations)
 
-	sdk.AddTool(s, &sdk.Tool{
+	addTool(s, &sdk.Tool{
 		Name:        "get_demographics",
 		Description: `Get the patient's details as their GP has them: name, date of birth, sex, address and NHS number. Use it to confirm whose record this is.`,
 		Annotations: &sdk.ToolAnnotations{Title: "Get demographics", ReadOnlyHint: true},

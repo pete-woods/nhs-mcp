@@ -25,7 +25,7 @@ const (
 )
 
 func (a *api) addResultTools(s *sdk.Server) {
-	sdk.AddTool(s, &sdk.Tool{
+	addTool(s, &sdk.Tool{
 		Name: "list_test_results",
 		Description: `List the user's GP test results, newest first: id, date, name, how many values it has, and which values are outside their reference range.
 Filter by since/until (YYYY-MM-DD), name (part of a test or measurement name, ignoring case and punctuation; common names like "vitamin d", "kidney" or "cholesterol" also find the tests GP systems record them as), and out_of_range_only. limit defaults to 50, at most 500; truncated says there were more.
@@ -33,20 +33,20 @@ Pass an id to get_test_result for the values.`,
 		Annotations: &sdk.ToolAnnotations{Title: "List test results", ReadOnlyHint: true},
 	}, a.listResults)
 
-	sdk.AddTool(s, &sdk.Tool{
+	addTool(s, &sdk.Tool{
 		Name:        "get_test_result",
 		Description: `Get one test result from list_test_results by id: every value with its units, reference range, a low/high flag, and any notes from the lab or GP.`,
 		Annotations: &sdk.ToolAnnotations{Title: "Get test result", ReadOnlyHint: true},
 	}, a.getResult)
 
-	sdk.AddTool(s, &sdk.Tool{
+	addTool(s, &sdk.Tool{
 		Name: "get_test_trend",
 		Description: `Follow one measurement over time, oldest first, across every result it appears in, e.g. "Serum ferritin" or "Haemoglobin concentration".
 An exact name (ignoring case and punctuation) is used if there is one, otherwise every measurement whose name contains it, otherwise those a common name stands for (e.g. "vitamin d"); measurements lists the names matched. list_test_names has the exact names. since (YYYY-MM-DD) limits how far back.`,
 		Annotations: &sdk.ToolAnnotations{Title: "Get test trend", ReadOnlyHint: true},
 	}, a.getTrend)
 
-	sdk.AddTool(s, &sdk.Tool{
+	addTool(s, &sdk.Tool{
 		Name: "list_test_names",
 		Description: `List the names of the user's tests (e.g. "Full blood count - FBC") and of the measurements in them (e.g. "Serum sodium"), with how many times each appears and the latest date, most common first.
 Use the measurement names with get_test_trend, and either with list_test_results' name filter.`,

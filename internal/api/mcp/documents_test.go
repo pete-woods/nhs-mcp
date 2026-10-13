@@ -70,9 +70,15 @@ func TestDocuments(t *testing.T) {
 		res := mcptest.Result(t, fix.cs, "get_document", map[string]any{"id": "doc-letter"})
 		assert.Assert(t, !res.IsError)
 		got := structured[documentContent](t, res)
-		assert.Check(t, cmp.Equal(got.Text, "Dear Dr Example,\nFerritin has recovered on oral iron.\nFerritin | 22 ug/L"))
 		assert.Check(t, cmp.Equal(got.Pages, 0))
-		assert.Check(t, cmp.Len(res.Content, 1))
+		assert.Assert(t, cmp.Len(res.Content, 1))
+		doc, ok := res.Content[0].(*sdk.EmbeddedResource)
+		assert.Assert(t, ok, "%T", res.Content[0])
+		assert.Check(t, cmp.DeepEqual(doc.Resource, &sdk.ResourceContents{
+			URI:      "nhs-app://documents/doc-letter",
+			MIMEType: "text/plain",
+			Text:     "Dear Dr Example,\nFerritin has recovered on oral iron.\nFerritin | 22 ug/L",
+		}))
 	})
 
 	t.Run("a scan is page images", func(t *testing.T) {
@@ -83,9 +89,13 @@ func TestDocuments(t *testing.T) {
 		assert.Check(t, cmp.Equal(got.PagesReturned, 2))
 		assert.Check(t, cmp.Equal(got.Unshowable, 1), "TIFF pages can't be shown")
 		assert.Check(t, cmp.DeepEqual(got.UnshowableTypes, []string{"image/tiff (looks like application/octet-stream)"}))
-		assert.Assert(t, cmp.Len(res.Content, 3))
-		img, ok := res.Content[1].(*sdk.ImageContent)
-		assert.Assert(t, ok, "%T", res.Content[1])
+		assert.Assert(t, cmp.Len(res.Content, 2), "only the page images")
+		for i, c := range res.Content {
+			_, ok := c.(*sdk.ImageContent)
+			assert.Check(t, ok, "content %d is %T", i, c)
+		}
+		img, ok := res.Content[0].(*sdk.ImageContent)
+		assert.Assert(t, ok)
 		assert.Check(t, cmp.Equal(img.MIMEType, "image/png"))
 		assert.Check(t, cmp.Contains(string(img.Data), "PNG"))
 	})
@@ -140,7 +150,6 @@ type documents struct {
 
 type documentContent struct {
 	document
-	Text            string   `json:"text"`
 	Pages           int      `json:"pages"`
 	PagesReturned   int      `json:"pages_returned"`
 	Truncated       bool     `json:"truncated"`

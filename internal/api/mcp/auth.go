@@ -9,20 +9,20 @@ import (
 )
 
 func (a *api) addAuthTools(s *sdk.Server) {
-	sdk.AddTool(s, &sdk.Tool{
+	addTool(s, &sdk.Tool{
 		Name: "login",
 		Description: `Log in to the NHS App. Opens a browser window at NHS login, where the user signs in with their own email, password and security code; this waits (up to five minutes) until they finish.
 Returns the same status as get_login_status. Ask the user before calling it, and tell them to look for the window.`,
 		Annotations: &sdk.ToolAnnotations{Title: "Log in to the NHS App", DestructiveHint: ptr(false), OpenWorldHint: ptr(true)},
 	}, a.login)
 
-	sdk.AddTool(s, &sdk.Tool{
+	addTool(s, &sdk.Tool{
 		Name:        "get_login_status",
 		Description: `Whether the user is logged in to the NHS App, and as whom (the record's name, GP practice ODS code, and NHS login proof level).`,
 		Annotations: &sdk.ToolAnnotations{Title: "Get login status", ReadOnlyHint: true},
 	}, a.loginStatus)
 
-	sdk.AddTool(s, &sdk.Tool{
+	addTool(s, &sdk.Tool{
 		Name:        "logout",
 		Description: `Log out of the NHS App and forget the cached record.`,
 		Annotations: &sdk.ToolAnnotations{Title: "Log out", DestructiveHint: ptr(false), IdempotentHint: true},

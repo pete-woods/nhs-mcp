@@ -10,6 +10,7 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"gotest.tools/v3/assert"
+	"gotest.tools/v3/assert/cmp"
 )
 
 // Timeout bounds each call.
@@ -48,10 +49,12 @@ func Result(t *testing.T, cs *sdk.ClientSession, name string, args map[string]an
 }
 
 // Call calls a tool that must succeed, decoding its structured output into T.
+// The output must only be structured, not repeated as text.
 func Call[T any](t *testing.T, cs *sdk.ClientSession, name string, args map[string]any) T {
 	t.Helper()
 	res := Result(t, cs, name, args)
 	assert.Assert(t, !res.IsError, "%s failed: %s", name, text(res))
+	assert.Check(t, cmp.Equal(text(res), ""), "%s should only return structured content", name)
 	raw, err := json.Marshal(res.StructuredContent)
 	assert.NilError(t, err)
 	var out T

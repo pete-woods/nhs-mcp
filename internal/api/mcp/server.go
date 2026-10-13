@@ -3,6 +3,7 @@
 package mcp
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -46,6 +47,20 @@ func New(cfg Config) *sdk.Server {
 
 type api struct {
 	sessions *session.Manager
+}
+
+// addTool adds a tool whose result is only its structured output. Left to
+// itself, the SDK repeats that output as JSON text, and clients that get both
+// handle it badly. Handlers that return a result keep its content, so tools
+// that return files can.
+func addTool[In, Out any](s *sdk.Server, t *sdk.Tool, h sdk.ToolHandlerFor[In, Out]) {
+	sdk.AddTool(s, t, func(ctx context.Context, req *sdk.CallToolRequest, in In) (*sdk.CallToolResult, Out, error) {
+		res, out, err := h(ctx, req, in)
+		if res == nil {
+			res = &sdk.CallToolResult{Content: []sdk.Content{}}
+		}
+		return res, out, err
+	})
 }
 
 // userError explains an error in terms the agent can act on.
