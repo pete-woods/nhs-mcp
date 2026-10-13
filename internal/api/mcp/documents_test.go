@@ -72,23 +72,14 @@ func TestDocuments(t *testing.T) {
 		assert.Assert(t, !res.IsError)
 		got := structured[documentContent](t, res)
 		assert.Check(t, cmp.Equal(got.Pages, 0))
-		assert.Check(t, cmp.Equal(got.FileURI, "nhs-app://documents/doc-letter/file"))
-		assert.Assert(t, cmp.Len(res.Content, 2), "the text, then a link to the file")
+		assert.Check(t, cmp.Equal(got.FileURI, ""), "the download is the same text")
+		assert.Assert(t, cmp.Len(res.Content, 1), "only the text")
 		doc, ok := res.Content[0].(*sdk.EmbeddedResource)
 		assert.Assert(t, ok, "%T", res.Content[0])
 		assert.Check(t, cmp.DeepEqual(doc.Resource, &sdk.ResourceContents{
 			URI:      "nhs-app://documents/doc-letter",
 			MIMEType: "text/plain",
 			Text:     "Dear Dr Example,\nFerritin has recovered on oral iron.\nFerritin | 22 ug/L",
-		}))
-		link, ok := res.Content[1].(*sdk.ResourceLink)
-		assert.Assert(t, ok, "%T", res.Content[1])
-		assert.Check(t, cmp.DeepEqual(link, &sdk.ResourceLink{
-			URI:         "nhs-app://documents/doc-letter/file",
-			Name:        "Haematology clinic letter",
-			Title:       "Letter from haematology",
-			Description: "The original rtf file.",
-			Size:        ptr(int64(2048)),
 		}))
 	})
 
@@ -111,7 +102,12 @@ func TestDocuments(t *testing.T) {
 		assert.Check(t, cmp.Contains(string(img.Data), "PNG"))
 		link, ok := res.Content[2].(*sdk.ResourceLink)
 		assert.Assert(t, ok, "%T", res.Content[2])
-		assert.Check(t, cmp.Equal(link.URI, "nhs-app://documents/doc-scan/file"))
+		assert.Check(t, cmp.DeepEqual(link, &sdk.ResourceLink{
+			URI:         "nhs-app://documents/doc-scan/file",
+			Name:        "Discharge summary",
+			Title:       "Scanned discharge summary",
+			Description: "The original pdf file.",
+		}), "no size: the NHS App's sizes aren't those of the download")
 	})
 
 	t.Run("max_pages", func(t *testing.T) {
@@ -156,6 +152,22 @@ func TestDocumentFiles(t *testing.T) {
 			MIMEType: "text/plain",
 			Text:     "Dear Dr Example, Ferritin has recovered on oral iron.",
 		}))
+	})
+
+	t.Run("an image's type is from its bytes", func(t *testing.T) {
+		gif := []byte("GIF89a fake")
+		fix.nhs.SetDocument("doc-scan", fakenhs.Document{File: gif, ContentType: "image/tiff"})
+		got := readResource(t, fix, "nhs-app://documents/doc-scan/file")
+		assert.Check(t, cmp.Equal(got.MIMEType, "image/gif"), "the NHS App labels converted TIFFs image/tiff")
+		assert.Check(t, cmp.DeepEqual(got.Blob, gif))
+	})
+
+	t.Run("other types are from the header", func(t *testing.T) {
+		rtf := []byte("{\\rtf1 hello}")
+		fix.nhs.SetDocument("doc-letter", fakenhs.Document{File: rtf, ContentType: "application/rtf"})
+		got := readResource(t, fix, "nhs-app://documents/doc-letter/file")
+		assert.Check(t, cmp.Equal(got.MIMEType, "application/rtf"), "RTF sniffs as text/plain")
+		assert.Check(t, cmp.DeepEqual(got.Blob, rtf))
 	})
 
 	t.Run("unknown and unavailable documents", func(t *testing.T) {

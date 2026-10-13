@@ -49,7 +49,7 @@ Filter by since/until (YYYY-MM-DD) and contains (part of the description or file
 	addTool(s, &sdk.Tool{
 		Name: "get_document",
 		Description: `Read a document from list_documents by id. Letters come back as a text resource; scans and PDFs come back as page images, which you can read.
-max_pages limits the images, default 5, at most 20; pages says how many there are. When the original file (e.g. the PDF) can be downloaded, it is linked as a resource, file_uri, to read only if the text and images aren't enough.`,
+max_pages limits the images, default 5, at most 20; pages says how many there are. When a document without text (e.g. a PDF) can be downloaded, its original file is linked as a resource, file_uri, to read only if the text and images aren't enough.`,
 		Annotations: &sdk.ToolAnnotations{Title: "Get document", ReadOnlyHint: true},
 	}, a.getDocument)
 
@@ -181,7 +181,7 @@ type getDocumentOutput struct {
 	Truncated       bool     `json:"truncated" jsonschema:"Whether some pages were left out; raise max_pages for more."`
 	Unshowable      int      `json:"unshowable_pages,omitempty" jsonschema:"Pages in an image format MCP can't show."`
 	UnshowableTypes []string `json:"unshowable_types,omitempty"`
-	FileURI         string   `json:"file_uri,omitempty" jsonschema:"The original file, to read as an MCP resource, when it can be downloaded."`
+	FileURI         string   `json:"file_uri,omitempty" jsonschema:"The original file, to read as an MCP resource, when it can be downloaded and there is no text."`
 }
 
 func (a *api) getDocument(ctx context.Context, _ *sdk.CallToolRequest, in getDocumentInput) (*sdk.CallToolResult, *getDocumentOutput, error) {
@@ -199,7 +199,8 @@ func (a *api) getDocument(ctx context.Context, _ *sdk.CallToolRequest, in getDoc
 	out := &getDocumentOutput{document: toDocument(d)}
 	// Never nil, so the SDK doesn't add the output as text.
 	files := []sdk.Content{}
-	if text := htmltext.Text(content.Content); text != "" {
+	text := htmltext.Text(content.Content)
+	if text != "" {
 		files = append(files, &sdk.EmbeddedResource{Resource: &sdk.ResourceContents{
 			URI:      documentURI(d.DocumentIdentifier),
 			MIMEType: "text/plain",
@@ -226,14 +227,16 @@ func (a *api) getDocument(ctx context.Context, _ *sdk.CallToolRequest, in getDoc
 		files = append(files, img)
 		out.PagesReturned++
 	}
-	if content.IsDownloadable {
+	// A letter's text is already here: the NHS App downloads it as the same
+	// text, less its line breaks. The size isn't given, as the NHS App's
+	// sizes aren't those of what it downloads.
+	if content.IsDownloadable && text == "" {
 		out.FileURI = documentURI(d.DocumentIdentifier) + documentFileSuffix
 		files = append(files, &sdk.ResourceLink{
 			URI:         out.FileURI,
 			Name:        d.Name,
 			Title:       d.Term,
 			Description: fmt.Sprintf("The original %s file.", out.Type),
-			Size:        ptr(int64(d.Size)),
 		})
 	}
 	return &sdk.CallToolResult{Content: files}, out, nil
@@ -252,10 +255,7 @@ func (a *api) readDocumentFile(ctx context.Context, req *sdk.ReadResourceRequest
 	if err != nil {
 		return nil, userError(err)
 	}
-	contents := &sdk.ResourceContents{URI: uri, MIMEType: f.ContentType}
-	if contents.MIMEType == "" {
-		contents.MIMEType = http.DetectContentType(f.Data)
-	}
+	contents := &sdk.ResourceContents{URI: uri, MIMEType: fileType(f)}
 	if strings.HasPrefix(contents.MIMEType, "text/") && utf8.Valid(f.Data) {
 		contents.Text = string(f.Data)
 	} else {
@@ -289,6 +289,18 @@ func documentFileID(uri string) (string, bool) {
 		return "", false
 	}
 	return id, true
+}
+
+// fileType is a document file's MIME type. The bytes are trusted over the
+// NHS App's header when they look like an image or a PDF, as it can be wrong
+// (it calls TIFFs it has converted to GIF image/tiff); otherwise the header,
+// which knows types that sniffing doesn't, like RTF or Word.
+func fileType(f session.File) string {
+	sniffed := http.DetectContentType(f.Data)
+	if strings.HasPrefix(sniffed, "image/") || sniffed == "application/pdf" || f.ContentType == "" {
+		return sniffed
+	}
+	return f.ContentType
 }
 
 // dataImage matches the inline images the NHS App renders scans and PDFs as.
