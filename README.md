@@ -76,9 +76,11 @@ minutes.
 | `list_test_names` | Test and measurement names to search with |
 | `list_consultations` | Appointments: who you saw, and what they recorded under each heading |
 | `list_documents` | Letters, scans and attachments |
-| `get_document` | A document as text, or for scans and PDFs as page images the agent can read |
+| `get_document` | A document as text, or for scans and PDFs as page images the agent can read, with a link to the original file |
 | `get_medications`, `get_allergies`, `get_problems`, `get_immunisations` | The rest of the GP record |
 | `get_demographics` | Name, date of birth, address, NHS number |
+
+The original files are MCP resources, `nhs-app://documents/{id}/file`, which `get_document` links to.
 
 ## Configuration
 

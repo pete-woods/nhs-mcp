@@ -35,7 +35,7 @@ func New(cfg Config) *sdk.Server {
 		Instructions: instructions,
 		// Set explicitly so the SDK doesn't advertise listChanged, which makes
 		// some clients hold a stream open waiting for changes that never come.
-		Capabilities: &sdk.ServerCapabilities{Tools: &sdk.ToolCapabilities{}},
+		Capabilities: &sdk.ServerCapabilities{Tools: &sdk.ToolCapabilities{}, Resources: &sdk.ResourceCapabilities{}},
 	})
 	a := &api{sessions: cfg.Sessions}
 	a.addAuthTools(s)

@@ -267,17 +267,9 @@ var (
 
 // Document fetches a document in the record for viewing.
 func (m *Manager) Document(ctx context.Context, id string) (nhsapp.Document, nhsapp.DocumentContent, error) {
-	r, err := m.Record(ctx)
+	d, err := m.document(ctx, id)
 	if err != nil {
-		return nhsapp.Document{}, nhsapp.DocumentContent{}, err
-	}
-	i := slices.IndexFunc(r.Documents.Data, func(d nhsapp.Document) bool { return d.DocumentIdentifier == id })
-	if i < 0 {
-		return nhsapp.Document{}, nhsapp.DocumentContent{}, ErrNoDocument
-	}
-	d := r.Documents.Data[i]
-	if !d.IsAvailable || !d.IsValidFile {
-		return d, nhsapp.DocumentContent{}, ErrDocumentUnavailable
+		return d, nhsapp.DocumentContent{}, err
 	}
 
 	m.mu.Lock()
@@ -286,6 +278,28 @@ func (m *Manager) Document(ctx context.Context, id string) (nhsapp.Document, nhs
 		return m.cfg.App.Document(ctx, d)
 	})
 	return d, c, err
+}
+
+// File is a document's original file.
+type File struct {
+	Data        []byte
+	ContentType string
+}
+
+// DownloadDocument fetches the original file of a document in the record.
+func (m *Manager) DownloadDocument(ctx context.Context, id string) (nhsapp.Document, File, error) {
+	d, err := m.document(ctx, id)
+	if err != nil {
+		return d, File{}, err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	f, err := withGPSession(ctx, m, func(ctx context.Context) (File, error) {
+		data, contentType, err := m.cfg.App.DownloadDocument(ctx, d)
+		return File{Data: data, ContentType: contentType}, err
+	})
+	return d, f, err
 }
 
 // Demographics returns the patient's details as their GP has them.
@@ -368,4 +382,21 @@ func (m *Manager) status() Status {
 // forget drops the session and anything read with it.
 func (m *Manager) forget() {
 	m.session, m.record, m.historic, m.detailedResults = nil, nil, nil, false
+}
+
+// document finds a document in the record that the GP system can supply.
+func (m *Manager) document(ctx context.Context, id string) (nhsapp.Document, error) {
+	r, err := m.Record(ctx)
+	if err != nil {
+		return nhsapp.Document{}, err
+	}
+	i := slices.IndexFunc(r.Documents.Data, func(d nhsapp.Document) bool { return d.DocumentIdentifier == id })
+	if i < 0 {
+		return nhsapp.Document{}, ErrNoDocument
+	}
+	d := r.Documents.Data[i]
+	if !d.IsAvailable || !d.IsValidFile {
+		return d, ErrDocumentUnavailable
+	}
+	return d, nil
 }

@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -48,9 +49,16 @@ Filter by since/until (YYYY-MM-DD) and contains (part of the description or file
 	addTool(s, &sdk.Tool{
 		Name: "get_document",
 		Description: `Read a document from list_documents by id. Letters come back as a text resource; scans and PDFs come back as page images, which you can read.
-max_pages limits the images, default 5, at most 20; pages says how many there are.`,
+max_pages limits the images, default 5, at most 20; pages says how many there are. When the original file (e.g. the PDF) can be downloaded, it is linked as a resource, file_uri, to read only if the text and images aren't enough.`,
 		Annotations: &sdk.ToolAnnotations{Title: "Get document", ReadOnlyHint: true},
 	}, a.getDocument)
+
+	s.AddResourceTemplate(&sdk.ResourceTemplate{
+		Name:        "document_file",
+		Title:       "Document file",
+		URITemplate: documentURIPrefix + "{id}" + documentFileSuffix,
+		Description: "The original file of a document in the user's GP record (PDF, RTF, TIFF, ...), as get_document links it.",
+	}, a.readDocumentFile)
 }
 
 type sinceUntil struct {
@@ -173,6 +181,7 @@ type getDocumentOutput struct {
 	Truncated       bool     `json:"truncated" jsonschema:"Whether some pages were left out; raise max_pages for more."`
 	Unshowable      int      `json:"unshowable_pages,omitempty" jsonschema:"Pages in an image format MCP can't show."`
 	UnshowableTypes []string `json:"unshowable_types,omitempty"`
+	FileURI         string   `json:"file_uri,omitempty" jsonschema:"The original file, to read as an MCP resource, when it can be downloaded."`
 }
 
 func (a *api) getDocument(ctx context.Context, _ *sdk.CallToolRequest, in getDocumentInput) (*sdk.CallToolResult, *getDocumentOutput, error) {
@@ -183,7 +192,7 @@ func (a *api) getDocument(ctx context.Context, _ *sdk.CallToolRequest, in getDoc
 	if err != nil {
 		return nil, nil, userError(err)
 	}
-	if !content.IsViewable {
+	if !content.IsViewable && !content.IsDownloadable {
 		return nil, nil, fmt.Errorf("the NHS App can't show this %s document", d.Extension)
 	}
 
@@ -217,12 +226,69 @@ func (a *api) getDocument(ctx context.Context, _ *sdk.CallToolRequest, in getDoc
 		files = append(files, img)
 		out.PagesReturned++
 	}
+	if content.IsDownloadable {
+		out.FileURI = documentURI(d.DocumentIdentifier) + documentFileSuffix
+		files = append(files, &sdk.ResourceLink{
+			URI:         out.FileURI,
+			Name:        d.Name,
+			Title:       d.Term,
+			Description: fmt.Sprintf("The original %s file.", out.Type),
+			Size:        ptr(int64(d.Size)),
+		})
+	}
 	return &sdk.CallToolResult{Content: files}, out, nil
 }
 
+func (a *api) readDocumentFile(ctx context.Context, req *sdk.ReadResourceRequest) (*sdk.ReadResourceResult, error) {
+	uri := req.Params.URI
+	id, ok := documentFileID(uri)
+	if !ok {
+		return nil, sdk.ResourceNotFoundError(uri)
+	}
+	_, f, err := a.sessions.DownloadDocument(ctx, id)
+	if errors.Is(err, session.ErrNoDocument) {
+		return nil, sdk.ResourceNotFoundError(uri)
+	}
+	if err != nil {
+		return nil, userError(err)
+	}
+	contents := &sdk.ResourceContents{URI: uri, MIMEType: f.ContentType}
+	if contents.MIMEType == "" {
+		contents.MIMEType = http.DetectContentType(f.Data)
+	}
+	if strings.HasPrefix(contents.MIMEType, "text/") && utf8.Valid(f.Data) {
+		contents.Text = string(f.Data)
+	} else {
+		contents.Blob = f.Data
+	}
+	return &sdk.ReadResourceResult{Contents: []*sdk.ResourceContents{contents}}, nil
+}
+
+const (
+	documentURIPrefix  = "nhs-app://documents/"
+	documentFileSuffix = "/file"
+)
+
 // documentURI names a document in the resources get_document returns.
 func documentURI(id string) string {
-	return "nhs-app://documents/" + url.PathEscape(id)
+	return documentURIPrefix + url.PathEscape(id)
+}
+
+// documentFileID is the document id in a document file's URI.
+func documentFileID(uri string) (string, bool) {
+	rest, ok := strings.CutPrefix(uri, documentURIPrefix)
+	if !ok {
+		return "", false
+	}
+	rest, ok = strings.CutSuffix(rest, documentFileSuffix)
+	if !ok {
+		return "", false
+	}
+	id, err := url.PathUnescape(rest)
+	if err != nil || id == "" {
+		return "", false
+	}
+	return id, true
 }
 
 // dataImage matches the inline images the NHS App renders scans and PDFs as.
