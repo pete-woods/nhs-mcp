@@ -26,6 +26,21 @@ func TestText(t *testing.T) {
 			want: "Test | Value\nSodium | 140 mmol/L",
 		},
 		{
+			name: "cells holding blocks stay on one line",
+			html: `<table><tr><td><p>History</p></td><td><p>Came in with wife</p></td><td><p></p></td></tr></table>`,
+			want: "History | Came in with wife",
+		},
+		{
+			name: "empty cells and rows dropped",
+			html: `<table><tr><td>Problem</td><td>Sleep disorder</td></tr><tr><td></td><td><p> </p></td></tr><tr><td></td><td>Worried</td></tr></table>`,
+			want: "Problem | Sleep disorder\nWorried",
+		},
+		{
+			name: "a cell spanning lines puts each cell on its own lines",
+			html: `<table><tr><td>Results</td><td><table><tr><td>Sodium</td><td>140</td></tr><tr><td>Potassium</td><td>4.1</td></tr></table></td></tr></table>`,
+			want: "Results\nSodium | 140\nPotassium | 4.1",
+		},
+		{
 			name: "scripts dropped, entities decoded",
 			html: `<div>A &amp; B<script>alert(1)</script></div>`,
 			want: "A & B",

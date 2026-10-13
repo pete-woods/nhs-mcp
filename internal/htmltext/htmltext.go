@@ -10,8 +10,9 @@ import (
 	"golang.org/x/net/html/atom"
 )
 
-// Text extracts the readable text: blocks become lines, table cells are
-// separated by " | ", and scripts and styles are dropped.
+// Text extracts the readable text: blocks become lines, a table row's cells
+// are separated by " | ", empty cells and rows are dropped, and scripts and
+// styles are dropped.
 func Text(s string) string {
 	doc, err := html.Parse(strings.NewReader(s))
 	if err != nil {
@@ -36,8 +37,9 @@ func walk(b *strings.Builder, n *html.Node) {
 			b.WriteString("\n")
 			return
 		}
-		if cell[n.DataAtom] {
-			b.WriteString(" | ")
+		if n.DataAtom == atom.Tr {
+			row(b, n)
+			return
 		}
 	}
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
@@ -45,6 +47,31 @@ func walk(b *strings.Builder, n *html.Node) {
 	}
 	if element && block[n.DataAtom] {
 		b.WriteString("\n")
+	}
+}
+
+// row writes a table row's non-empty cells on one line, or, when a cell
+// spans lines (e.g. it holds a table), each cell on its own lines.
+func row(b *strings.Builder, tr *html.Node) {
+	var cells []string
+	oneLine := true
+	for c := tr.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type != html.ElementNode || !cell[c.DataAtom] {
+			continue
+		}
+		var cb strings.Builder
+		walk(&cb, c)
+		if text := tidy(cb.String()); text != "" {
+			cells = append(cells, text)
+			oneLine = oneLine && !strings.Contains(text, "\n")
+		}
+	}
+	sep := " | "
+	if !oneLine {
+		sep = "\n"
+	}
+	if len(cells) > 0 {
+		b.WriteString(strings.Join(cells, sep) + "\n")
 	}
 }
 
@@ -73,9 +100,7 @@ var (
 func tidy(s string) string {
 	lines := strings.Split(s, "\n")
 	for i, l := range lines {
-		l = spaces.ReplaceAllString(l, " ")
-		l = strings.TrimPrefix(strings.TrimSpace(l), "| ")
-		lines[i] = strings.TrimSpace(l)
+		lines[i] = strings.TrimSpace(spaces.ReplaceAllString(l, " "))
 	}
 	return strings.TrimSpace(blankLines.ReplaceAllString(strings.Join(lines, "\n"), "\n\n"))
 }
