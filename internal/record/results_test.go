@@ -71,6 +71,9 @@ func TestFind_Names(t *testing.T) {
 		result("vitd", "Vitamin D", "Serum 25-OH vitamin D3 level"),
 		result("renal", "Renal profile", "eGFRcreat (CKD-EPI)/1.73 m*2", "Serum sodium"),
 		result("lft", "Liver function test", "Serum ALT level"),
+		result("ca125", "CA125", "Se CA 125 level"),
+		result("coeliac", "Serum Coeliac screen", "Total serum IgA", "IgA Abs to TTG"),
+		result("amh", "Anti-Mullerian hormone", "Serum anti-Müllerian hormone level"),
 	)
 	tests := []struct {
 		name string
@@ -93,6 +96,11 @@ func TestFind_Names(t *testing.T) {
 		{name: "U&E", want: []string{"renal"}},
 		{name: "LFTs", want: []string{"lft"}},
 		{name: "alanine aminotransferase", want: []string{"lft"}},
+		{name: "ca125", want: []string{"ca125"}},
+		{name: "cancer antigen 125", want: []string{"ca125"}},
+		{name: "iga", want: []string{"coeliac"}},
+		{name: "tissue transglutaminase", want: []string{"coeliac"}},
+		{name: "AMH", want: []string{"amh"}},
 		{name: "ess", want: nil},
 		{name: "ferritin", want: nil},
 		{name: "salt", want: nil},
@@ -111,7 +119,19 @@ func TestTrend_Names(t *testing.T) {
 		result("bp", "O/E - blood pressure reading", "Systolic arterial pressure", "Diastolic arterial pressure"),
 		result("vitd", "Vitamin D", "Serum 25-OH vitamin D3 level", "Serum vitamin D2 level"),
 		result("psa", "PSA", "Se prostate specific Ag level"),
+		result("ca125", "CA125", "Se CA 125 level"),
 	)
+
+	t.Run("common names include abbreviated vitamin D3", func(t *testing.T) {
+		r := recordOf(result("vitd3", "Vit D 25-OH", "Serum 25-HO vit D3 level"))
+		_, names := record.Trend(r, "vitamin d")
+		assert.Check(t, cmp.DeepEqual(names, []string{"Serum 25-HO vit D3 level"}))
+	})
+
+	t.Run("common names bridge spacing the GP system adds", func(t *testing.T) {
+		_, names := record.Trend(r, "CA125")
+		assert.Check(t, cmp.DeepEqual(names, []string{"Se CA 125 level"}))
+	})
 
 	t.Run("exact ignores punctuation and abbreviations", func(t *testing.T) {
 		_, names := record.Trend(r, "serum prostate specific antigen level")

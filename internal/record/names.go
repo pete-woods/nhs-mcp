@@ -51,7 +51,7 @@ func (q nameQuery) matches(name string) bool {
 var aliases = buildAliases([]aliasGroup{
 	{
 		queries: []string{"vitamin d", "vit d", "25 oh d", "25 oh vitamin d", "25 hydroxyvitamin d"},
-		names:   []string{"vitamin d", "vitamin d2", "vitamin d3", "vit d", "hydroxyvitamin d", "hydroxy vitamin d", "25 oh", "cholecalciferol", "ergocalciferol", "calciferol", "calcidiol"},
+		names:   []string{"vitamin d", "vitamin d2", "vitamin d3", "vit d", "vit d2", "vit d3", "hydroxyvitamin d", "hydroxy vitamin d", "25 oh", "25 ho", "cholecalciferol", "ergocalciferol", "calciferol", "calcidiol"},
 	},
 	{
 		queries: []string{"b12", "vitamin b12", "vit b12", "cobalamin"},
@@ -122,6 +122,18 @@ var aliases = buildAliases([]aliasGroup{
 	{queries: []string{"fsh", "follicle stimulating hormone"}, names: []string{"fsh", "follicle stimulating"}},
 	{queries: []string{"lh", "luteinising hormone", "luteinizing hormone"}, names: []string{"lh", "luteinising", "luteinizing"}},
 	{queries: []string{"oestradiol", "estradiol"}, names: []string{"oestradiol", "estradiol"}},
+	{
+		queries: []string{"amh", "anti mullerian hormone", "anti müllerian hormone", "ovarian reserve"},
+		names:   []string{"amh", "mullerian", "müllerian"},
+	},
+	{queries: []string{"shbg", "sex hormone binding globulin"}, names: []string{"shbg", "sex hormone binding"}},
+	{queries: []string{"fai", "free androgen index"}, names: []string{"fai", "free androgen"}},
+	{queries: []string{"ca125", "ca 125", "cancer antigen 125"}, names: []string{"ca125", "ca 125", "cancer antigen 125"}},
+	{queries: []string{"iga", "immunoglobulin a"}, names: []string{"iga", "immunoglobulin a"}},
+	{
+		queries: []string{"coeliac", "celiac", "ttg", "tissue transglutaminase"},
+		names:   []string{"coeliac", "celiac", "ttg", "tissue transglutaminase"},
+	},
 	{
 		queries: []string{"hcg", "pregnancy"},
 		names:   []string{"hcg", "chorionic gonadotrophin", "chorionic gonadotropin", "pregnancy"},
